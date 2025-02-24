@@ -1,7 +1,8 @@
+#![allow(unsafe_op_in_unsafe_fn)]
 use std::ffi::CString;
 use std::os::fd::{AsFd, AsRawFd};
 use std::ptr::NonNull;
-
+pub mod gl;
 pub use drm::Device;
 pub use drm::control::Device as ControlDevice;
 
@@ -46,15 +47,16 @@ impl Card {
     }
 }
 
-
-use drm::control::{connector};
+use drm::control::{connector, crtc};
 use gbm::{AsRaw, BufferObjectFlags};
 use glutin::api::egl;
 use glutin::config::{ConfigSurfaceTypes, ConfigTemplateBuilder};
 use glutin::context::ContextAttributesBuilder;
 use glutin::prelude::*;
 use glutin::surface::{PbufferSurface, SurfaceAttributesBuilder, WindowSurface};
-use raw_window_handle::{DrmDisplayHandle, GbmDisplayHandle, GbmWindowHandle, RawDisplayHandle, RawWindowHandle};
+use raw_window_handle::{
+    DrmDisplayHandle, GbmDisplayHandle, GbmWindowHandle, RawDisplayHandle, RawWindowHandle,
+};
 
 fn find_egl_config(egl_display: &egl::display::Display) -> egl::config::Config {
     unsafe { egl_display.find_configs(ConfigTemplateBuilder::new().build()) }
@@ -94,20 +96,37 @@ pub fn main() {
         .find(|&i| i.state() == connector::State::Connected)
         .expect("No connected connectors");
 
+    let crtcinfo: Vec<crtc::Info> = res
+        .crtcs()
+        .iter()
+        .flat_map(|crtc| card.get_crtc(*crtc))
+        .collect();
     // Get the first (usually best) mode
     let &mode = con.modes().first().expect("No modes found on connector");
 
     let (disp_width, disp_height) = mode.size();
 
     // Find a crtc and FB
+    let crtc = crtcinfo.first().expect("No crtcs found");
+
     println!("{:#?}", mode);
     let gbm = gbm::Device::new(card).unwrap();
-    let rdh = RawDisplayHandle::Gbm(GbmDisplayHandle::new(NonNull::new(gbm.as_raw_mut()).unwrap().cast()));
-    let egl_display = unsafe { egl::display::Display::new(rdh) }
-        .expect("Create EGL Display");
+    let rdh = RawDisplayHandle::Gbm(GbmDisplayHandle::new(
+        NonNull::new(gbm.as_raw_mut()).unwrap().cast(),
+    ));
+    let egl_display = unsafe { egl::display::Display::new(rdh) }.expect("Create EGL Display");
     let config = find_egl_config(&egl_display);
-    let gbm_surface = gbm.create_surface::<()>(disp_width.into(), disp_height.into(), gbm::Format::Xrgb8888, BufferObjectFlags::SCANOUT | BufferObjectFlags::RENDERING).unwrap();
-    let rwh = RawWindowHandle::Gbm(GbmWindowHandle::new(NonNull::new(gbm_surface.as_raw_mut()).unwrap().cast()));
+    let gbm_surface = gbm
+        .create_surface::<()>(
+            disp_width.into(),
+            disp_height.into(),
+            gbm::Format::Xrgb8888,
+            BufferObjectFlags::SCANOUT | BufferObjectFlags::RENDERING,
+        )
+        .unwrap();
+    let rwh = RawWindowHandle::Gbm(GbmWindowHandle::new(
+        NonNull::new(gbm_surface.as_raw_mut()).unwrap().cast(),
+    ));
     let surface = unsafe {
         egl_display
             .create_window_surface(
@@ -128,15 +147,44 @@ pub fn main() {
             .unwrap()
     };
 
-    gl::load_with(|symbol| {
+    let gles = gl::Gles2::load_with(|symbol| {
         let symbol = CString::new(symbol).unwrap();
         egl_display.get_proc_address(symbol.as_c_str()).cast()
     });
     let mut should_close = false;
+    let mut start_time = std::time::Instant::now();
+    let mut frame_count = 0;
+
     while !should_close {
         unsafe {
-            gl::ClearColor(1.0, 1.0, 0.0, 1.0);
+            gles.ClearColor(1.0, 1.0, 1.0, 1.0);
+            let mut pixels = vec![0u8; (disp_width as usize * disp_height as usize * 4) as usize];
+            gles.ReadPixels(
+                0,
+                0,
+                disp_width as i32,
+                disp_height as i32,
+                gl::RGBA,
+                gl::UNSIGNED_BYTE,
+                pixels.as_mut_ptr() as *mut _,
+            );
+            println!("{:?}", &pixels[..100]); // Print the first 100 bytes of the pixel data
             surface.swap_buffers(&context).unwrap();
+            let frontbuffer = gbm_surface.lock_front_buffer().unwrap();
+            let fb = gbm
+                .add_framebuffer(&frontbuffer, 32, 32)
+                .unwrap();
+            gbm.set_crtc(crtc.handle(), Some(fb), (0, 0), &[con.handle()], Some(mode))
+                .unwrap();
+        }
+
+        frame_count += 1;
+        let elapsed = start_time.elapsed().as_secs_f32();
+        if elapsed >= 1.0 {
+            let fps = frame_count as f32 / elapsed;
+            println!("FPS: {:.2}", fps);
+            frame_count = 0;
+            start_time = std::time::Instant::now();
         }
     }
 }

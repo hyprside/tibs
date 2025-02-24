@@ -4,9 +4,9 @@ version = "0.1.0"
 edition = "2024"
 
 [dependencies]
-# diretto = { git = "https://github.com/verdiwm/diretto", branch = "main" }
-gl = "0.14.0"
 glutin = "0.32.2"
 raw-window-handle = "0.6.2"
 drm = "0.14.1"
 gbm = "0.18.0"
+[build-dependencies]
+gl_generator = "0"
