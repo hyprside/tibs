@@ -157,18 +157,8 @@ pub fn main() {
 
     while !should_close {
         unsafe {
+            gles.Clear(gl::COLOR_BUFFER_BIT | gl::DEPTH_BUFFER_BIT);
             gles.ClearColor(1.0, 1.0, 1.0, 1.0);
-            let mut pixels = vec![0u8; (disp_width as usize * disp_height as usize * 4) as usize];
-            gles.ReadPixels(
-                0,
-                0,
-                disp_width as i32,
-                disp_height as i32,
-                gl::RGBA,
-                gl::UNSIGNED_BYTE,
-                pixels.as_mut_ptr() as *mut _,
-            );
-            println!("{:?}", &pixels[..100]); // Print the first 100 bytes of the pixel data
             surface.swap_buffers(&context).unwrap();
             let frontbuffer = gbm_surface.lock_front_buffer().unwrap();
             let fb = gbm
