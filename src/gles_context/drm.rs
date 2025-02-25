@@ -100,6 +100,7 @@ impl Card {
             let symbol = CString::new(symbol).unwrap();
             egl_display.get_proc_address(symbol.as_c_str()).cast()
         });
+        unsafe {gles.Viewport(0, 0, disp_width as i32, disp_height as i32)};
         DrmGlesContext {
             display: egl_display,
             gbm,
@@ -180,6 +181,8 @@ impl GlesContext for DrmGlesContext {
                 .unwrap();
             self.gbm.set_crtc(self.crtc.handle(), Some(fb), (0, 0), &[self.connector.handle()], Some(self.mode))
                 .unwrap();
+            let (width, height) = self.size();
+            self.gles.Viewport(0, 0, width as i32, height as i32);
         }
     }
 

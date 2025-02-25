@@ -49,6 +49,8 @@ impl GlesContext for GlfwGlesContext {
         if window.get_key(Key::Escape) == Action::Press {
             window.set_should_close(true);
         }
+        let (width, height) = window.get_size();
+        unsafe {self.gles.Viewport(0, 0, width, height)};
     }
 
     fn size(&self) -> (u32, u32) {
