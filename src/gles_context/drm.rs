@@ -96,18 +96,16 @@ impl Card {
                 .unwrap()
         };
 
-        let gles = gl::Gles2::load_with(|symbol| {
+        gl::load_with(|symbol| {
             let symbol = CString::new(symbol).unwrap();
             egl_display.get_proc_address(symbol.as_c_str()).cast()
         });
-        unsafe {gles.Viewport(0, 0, disp_width as i32, disp_height as i32)};
         DrmGlesContext {
             display: egl_display,
             gbm,
             gbm_surface,
             surface,
             context,
-            gles,
             connector,
             crtc,
             mode,
@@ -150,7 +148,6 @@ pub struct DrmGlesContext {
     connector: connector::Info,
     crtc: crtc::Info,
     mode: Mode,
-    gles: gl::Gles2,
 }
 
 fn find_egl_config(egl_display: &egl::display::Display) -> egl::config::Config {
@@ -168,9 +165,6 @@ fn find_egl_config(egl_display: &egl::display::Display) -> egl::config::Config {
 }
 
 impl GlesContext for DrmGlesContext {
-    fn gles(&self) -> &gl::Gles2 {
-        &self.gles
-    }
 
     fn swap_buffers(&self) {
         unsafe {
@@ -181,8 +175,6 @@ impl GlesContext for DrmGlesContext {
                 .unwrap();
             self.gbm.set_crtc(self.crtc.handle(), Some(fb), (0, 0), &[self.connector.handle()], Some(self.mode))
                 .unwrap();
-            let (width, height) = self.size();
-            self.gles.Viewport(0, 0, width as i32, height as i32);
         }
     }
 
