@@ -1,9 +1,9 @@
-pub use drm::Device;
 pub use drm::control::Device as ControlDevice;
+pub use drm::Device;
 use std::ffi::CString;
 use std::ptr::NonNull;
 
-use drm::control::{Mode, connector, crtc};
+use drm::control::{connector, crtc, Mode};
 use gbm::{AsRaw, BufferObjectFlags};
 use glutin::api::egl;
 use glutin::config::ConfigTemplateBuilder;
@@ -34,26 +34,29 @@ impl ControlDevice for Card {}
 
 /// Simple helper methods for opening a `Card`.
 impl Card {
-    pub fn open(path: &str) -> Self {
+    pub fn open(path: &str) -> std::io::Result<Self> {
         let mut options = std::fs::OpenOptions::new();
         options.read(true);
         options.write(true);
-        Card(options.open(path).unwrap())
+        Ok(Self(options.open(path)?))
     }
 
     pub fn open_global() -> Self {
-        let mut devices = egl::device::Device::query_devices().expect("Query EGL devices");
+        let mut devices = egl::device::Device::query_devices().expect("Failed to query devices");
         loop {
             let Some(egl_device) = devices.next() else {
-                panic!("No EGL devices found");
+                break Err(color_eyre::eyre::eyre!("No device found"));
             };
             dbg!(&egl_device);
             dbg!(egl_device.drm_render_device_node_path());
             let Some(drm) = dbg!(egl_device.drm_device_node_path()) else {
                 continue;
             };
-            break Self::open(drm.as_os_str().to_str().unwrap());
+            break Self::open(drm.as_os_str().to_str().unwrap()).map_err(Into::into);
         }
+        .or_else(|_| Self::open("/dev/dri/card1").map_err(color_eyre::eyre::Report::from))
+        .or_else(|_| Self::open("/dev/dri/card0").map_err(color_eyre::eyre::Report::from))
+        .unwrap()
     }
 
     pub fn initialize_egl(self) -> DrmGlesContext {
@@ -169,10 +172,15 @@ impl GlesContext for DrmGlesContext {
         unsafe {
             self.surface.swap_buffers(&self.context).unwrap();
             let frontbuffer = self.gbm_surface.lock_front_buffer().unwrap();
-            let fb = self.gbm
-                .add_framebuffer(&frontbuffer, 32, 32)
-                .unwrap();
-            self.gbm.set_crtc(self.crtc.handle(), Some(fb), (0, 0), &[self.connector.handle()], Some(self.mode))
+            let fb = self.gbm.add_framebuffer(&frontbuffer, 24, 32).unwrap();
+            self.gbm
+                .set_crtc(
+                    self.crtc.handle(),
+                    Some(fb),
+                    (0, 0),
+                    &[self.connector.handle()],
+                    Some(self.mode),
+                )
                 .unwrap();
         }
     }

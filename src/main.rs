@@ -1,13 +1,12 @@
 #![allow(unsafe_op_in_unsafe_fn)]
 
 use animation::{
-    colors::{interpolate_color_normalized, rgb_to_norm}, easing, Animation, BasicAnimation, DelayAnimation, LoopingAnimation
+    colors::{interpolate_color_normalized, rgb_to_norm},
+    easing, Animation, BasicAnimation, DelayAnimation, LoopingAnimation,
 };
 use gles_context::select_and_init_gles_context;
 use skia::{create_skia_surface, init_skia};
-use skia_safe::{
-    Color, Color4f, Data, Image, Paint, Rect
-};
+use skia_safe::{Color, Color4f, Data, Image, Paint, Rect};
 
 pub mod fps_counter;
 pub mod gl;
@@ -28,7 +27,11 @@ fn main() -> color_eyre::Result<()> {
                 BasicAnimation::new("logo", 0.5, easing::ease_out_back,)
             ),
             all!(
-                LoopingAnimation::infinite(BasicAnimation::new("progress_bar", 10.0, easing::linear)),
+                LoopingAnimation::infinite(BasicAnimation::new(
+                    "progress_bar",
+                    10.0,
+                    easing::linear
+                )),
                 BasicAnimation::new("progress_bar_opacity", 0.5, easing::ease_in_out_cubic)
             )
         )
@@ -37,10 +40,9 @@ fn main() -> color_eyre::Result<()> {
     let mut background_color = (0.0, 0.0, 0.0);
     let mut logo_alpha = 0.;
     let (mut skia_context, mut skia_surface) = init_skia(context.as_mut())?;
-    let logo_image = Image::from_encoded(
-        Data::from_filename("assets/logo.png").expect("failed to read assets/logo.png"),
-    )
-    .expect("assets/logo.png is invalid");
+    let logo_image =
+        Image::from_encoded(unsafe { Data::new_bytes(include_bytes!("assets/logo.png")) })
+            .expect("assets/logo.png is invalid");
     let mut progress_bar = 0.0;
     let mut progress_bar_opacity = 0.0;
     while !context.should_close() {
@@ -72,7 +74,7 @@ fn main() -> color_eyre::Result<()> {
         );
         {
             let mut paint = Paint::default();
-            paint.set_color(Color::WHITE.with_a((progress_bar_opacity*255.) as u8));
+            paint.set_color(Color::WHITE.with_a((progress_bar_opacity * 255.) as u8));
             paint.set_stroke_width(8.0);
             paint.set_stroke_cap(skia_safe::PaintCap::Round);
 
