@@ -1,14 +1,13 @@
 #![allow(unsafe_op_in_unsafe_fn)]
 
 use animation::{
-    Animation, BackAndForthAnimation, BasicAnimation,
+    Animation, BasicAnimation,
     colors::{interpolate_color_normalized, rgb_to_norm},
     easing,
 };
-use gl_errors::check_gl_error;
 use gles_context::select_and_init_gles_context;
 use skia::init_skia;
-use skia_safe::{Color4f, ColorSpace, Paint, Point};
+use skia_safe::{Color4f, Paint, Point};
 
 pub mod fps_counter;
 pub mod gl;
@@ -16,7 +15,6 @@ pub mod gl;
 pub mod gl_errors;
 pub mod animation;
 pub mod gles_context;
-pub mod shader;
 pub mod skia;
 fn main() -> color_eyre::Result<()> {
     color_eyre::install()?;
