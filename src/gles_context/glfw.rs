@@ -11,7 +11,7 @@ pub struct GlfwGlesContext {
 }
 
 impl GlfwGlesContext {
-    pub fn new(width: u32, height: u32, title: &str) -> Self {
+    pub fn new(title: &str) -> Self {
         let mut glfw = glfw::init(glfw::fail_on_errors).unwrap();
 
         glfw.window_hint(WindowHint::ContextVersion(3, 0));
@@ -20,7 +20,7 @@ impl GlfwGlesContext {
         glfw.window_hint(WindowHint::ClientApi(glfw::ClientApiHint::OpenGlEs));
         glfw.window_hint(WindowHint::ContextCreationApi(glfw::ContextCreationApi::Egl));
         let (mut window, _) = glfw.with_primary_monitor(|glfw, m| {
-            glfw.create_window(width, height, title,
+            glfw.create_window(1, 1, title,
                 m.map_or(glfw::WindowMode::Windowed, |m| glfw::WindowMode::FullScreen(m)))
             }).expect("Failed to create GLFW window.");
 
@@ -48,8 +48,6 @@ impl GlesContext for GlfwGlesContext {
         if window.get_key(Key::Escape) == Action::Press {
             window.set_should_close(true);
         }
-        let (width, height) = window.get_size();
-        unsafe {gl::Viewport(0, 0, width, height)};
     }
 
     fn size(&self) -> (u32, u32) {

@@ -409,6 +409,9 @@ impl crate::Animation for TargetAnimation {
     }
 }
 
+
+// Some common easings for animation
+// I have no idea how any of this math works, but it works
 pub mod easing {
     pub use std::convert::identity as linear;
 
@@ -429,12 +432,12 @@ pub mod easing {
     }
 
     pub fn ease_in_cubic(t: f32) -> f32 {
-        t * t * t
+        t.powi(3)
     }
 
     pub fn ease_out_cubic(t: f32) -> f32 {
         let t1 = t - 1.0;
-        t1 * t1 * t1 + 1.0
+        t1.powi(3) + 1.0
     }
 
     pub fn ease_in_out_cubic(t: f32) -> f32 {
@@ -442,17 +445,17 @@ pub mod easing {
             4.0 * t * t * t
         } else {
             let t1 = 2.0 * t - 2.0;
-            0.5 * t1 * t1 * t1 + 1.0
+            0.5 * t1.powi(3) + 1.0
         }
     }
 
     pub fn ease_in_quart(t: f32) -> f32 {
-        t * t * t * t
+        t.powi(4)
     }
 
     pub fn ease_out_quart(t: f32) -> f32 {
         let t1 = t - 1.0;
-        1.0 - t1 * t1 * t1 * t1
+        1.0 - t1.powi(4)
     }
 
     pub fn ease_in_out_quart(t: f32) -> f32 {
@@ -465,12 +468,12 @@ pub mod easing {
     }
 
     pub fn ease_in_quint(t: f32) -> f32 {
-        t * t * t * t * t
+        t.powi(5)
     }
 
     pub fn ease_out_quint(t: f32) -> f32 {
         let t1 = t - 1.0;
-        t1 * t1 * t1 * t1 * t1 + 1.0
+        t1.powi(5) + 1.0
     }
 
     pub fn ease_in_out_quint(t: f32) -> f32 {
@@ -480,6 +483,45 @@ pub mod easing {
             let t1 = 2.0 * t - 2.0;
             0.5 * t1 * t1 * t1 * t1 * t1 + 1.0
         }
+    }
+    pub fn ease_in_elastic(t: f32) -> f32 {
+        let c4 = (2.0 * std::f32::consts::PI) / 3.0;
+        if t == 0.0 {
+            0.0
+        } else if t == 1.0 {
+            1.0
+        } else {
+            -((2.0_f32).powf(10.0 * t - 10.0)) * (((t * 10.0 - 10.75) * c4).sin())
+        }
+    }
+
+    pub fn ease_out_elastic(t: f32) -> f32 {
+        let c4 = (2.0 * std::f32::consts::PI) / 3.0;
+        if t == 0.0 {
+            0.0
+        } else if t == 1.0 {
+            1.0
+        } else {
+            ((2.0_f32).powf(-10.0 * t)) * (((t * 10.0 - 0.75) * c4).sin()) + 1.0
+        }
+    }
+
+    pub fn ease_in_out_elastic(t: f32) -> f32 {
+        let c5 = (2.0 * std::f32::consts::PI) / 4.5;
+        if t == 0.0 {
+            0.0
+        } else if t == 1.0 {
+            1.0
+        } else if t < 0.5 {
+            -0.5 * ((2.0_f32).powf(20.0 * t - 10.0)) * (((20.0 * t - 11.125) * c5).sin())
+        } else {
+            ((2.0_f32).powf(-20.0 * t + 10.0)) * (((20.0 * t - 11.125) * c5).sin()) * 0.5 + 1.0
+        }
+    }
+    pub fn ease_out_back(t: f32) -> f32 {
+        let c1 = 1.70158;
+        let c3 = c1 + 1.0;
+        1.0 + c3 * (t - 1.0).powi(3) + c1 * (t - 1.0).powi(2)
     }
 }
 
@@ -597,7 +639,7 @@ macro_rules! all {
             $(
                 animations.push(Box::new($x));
             )*
-            ParallelAnimation::new(animations)
+            $crate::animation::ParallelAnimation::new(animations)
         }
     };
 }
@@ -610,7 +652,7 @@ macro_rules! seq {
             $(
                 animations.push(Box::new($x));
             )*
-            SequenceAnimation::new(animations)
+            $crate::animation::SequenceAnimation::new(animations)
         }
     };
 }

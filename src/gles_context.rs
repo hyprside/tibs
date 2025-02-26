@@ -19,7 +19,7 @@ pub fn select_and_init_gles_context() -> Box<dyn GlesContext> {
             #[cfg(not(feature = "glfw"))]
             println!("[WARN] GLFW feature is not enabled, ignoring DISPLAY variable");
             #[cfg(feature = "glfw")]
-            break 'a Box::new(glfw::GlfwGlesContext::new(1920 / 2, 1080 / 2, "Tiago's Incredible Boot Screen"))
+            break 'a Box::new(glfw::GlfwGlesContext::new("Tiago's Incredible Boot Screen"))
         }
         Box::new(drm::DrmGlesContext::new_from_default_card())
     };
