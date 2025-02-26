@@ -1,3 +1,5 @@
+use std::ffi::c_void;
+
 pub mod drm;
 #[cfg(feature = "glfw")]
 pub mod glfw;
@@ -8,6 +10,7 @@ pub trait GlesContext {
     fn should_close(&self) -> bool {
         false
     }
+    fn get_proc_address(&mut self, fn_name: &str) -> *const c_void;
 }
 pub fn select_and_init_gles_context() -> Box<dyn GlesContext> {
     let display_is_defined = std::env::var("DISPLAY").is_ok();

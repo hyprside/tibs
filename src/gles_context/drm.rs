@@ -95,12 +95,7 @@ impl Card {
                 .make_current(&surface)
                 .unwrap()
         };
-
-        gl::load_with(|symbol| {
-            let symbol = CString::new(symbol).unwrap();
-            egl_display.get_proc_address(symbol.as_c_str()).cast()
-        });
-        DrmGlesContext {
+        let mut context = DrmGlesContext {
             display: egl_display,
             gbm,
             gbm_surface,
@@ -109,7 +104,9 @@ impl Card {
             connector,
             crtc,
             mode,
-        }
+        };
+        gl::load_with(|symbol| context.get_proc_address(symbol));
+        context
     }
 
     fn get_connector_and_crtc(&self) -> (connector::Info, crtc::Info, Mode) {
@@ -165,7 +162,10 @@ fn find_egl_config(egl_display: &egl::display::Display) -> egl::config::Config {
 }
 
 impl GlesContext for DrmGlesContext {
-
+    fn get_proc_address(&mut self, fn_name: &str) -> *const std::ffi::c_void {
+        let symbol = CString::new(fn_name).unwrap();
+        self.display.get_proc_address(symbol.as_c_str())
+    }
     fn swap_buffers(&self) {
         unsafe {
             self.surface.swap_buffers(&self.context).unwrap();

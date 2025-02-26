@@ -35,6 +35,10 @@
             xorg.libXinerama
             xorg.libXcursor
             xorg.libXi
+            python3
+            ninja
+            fontconfig
+            freetype
             (rust-bin.fromRustupToolchainFile ./rust-toolchain.toml)
           ];
           LD_LIBRARY_PATH = lib.makeLibraryPath buildInputs;
