@@ -151,7 +151,6 @@ fn find_egl_config(egl_display: &egl::display::Display) -> egl::config::Config {
     unsafe { egl_display.find_configs(ConfigTemplateBuilder::new().build()) }
         .unwrap()
         .reduce(|config, acc| {
-            println!("{:#?}", config.config_surface_types());
             if config.num_samples() > acc.num_samples() {
                 config
             } else {

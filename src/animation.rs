@@ -331,7 +331,6 @@ impl Animation for BackAndForthAnimation {
         if self.animation.is_finished() || !self.animation.has_started() {
             self.current_count += 1;
             self.forward = !self.forward;
-            println!("Reverse");
         }
         updates
     }

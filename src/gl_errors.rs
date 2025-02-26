@@ -14,7 +14,6 @@ pub fn check_gl_error() {
             };
             print!("OpenGL Error: {}", error_message);
             let backtrace = std::backtrace::Backtrace::capture();
-            println!("{:#?}", backtrace);
             error = gl::GetError();
         }
     }

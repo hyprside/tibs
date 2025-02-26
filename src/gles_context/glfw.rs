@@ -32,7 +32,6 @@ impl GlfwGlesContext {
             window: RefCell::new(window)
         };
         gl::load_with(|symbol| context.get_proc_address(symbol));
-        println!("loaded gl crate");
         context
     }
 }
