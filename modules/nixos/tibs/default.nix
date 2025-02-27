@@ -31,9 +31,11 @@ in {
     boot.kernelParams = mkForce ["quiet" "loglevel=0" "systemd.show_status=0" "udev.log_level=3" "vt.global_cursor_default=0"];
     systemd.services.tibs = {
       description = "Tiago's Incredible Boot Screen";
-      wantedBy = [ "sysinit.target" ];
+      before = [ "display-manager.target" "multi-user.target" "basic.target" ];
+      wantedBy = [ "graphical.target" ];
+      unitConfig.DefaultDependencies = "no";
       serviceConfig = {
-        Type = "forking";
+        Type = "simple";
         ExecStart = pkgs.writeShellScript "tibs-service" ''
           echo "Iniciando TIBS..."
           export OPENGL_DRIVER_PATH=${driversEnv}
