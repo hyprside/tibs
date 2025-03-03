@@ -32,16 +32,13 @@ in {
     systemd.services.tibs = {
       description = "Tiago's Incredible Boot Screen";
       before = [ "display-manager.target" "multi-user.target" "basic.target" ];
-      wantedBy = [ "graphical.target" ];
+      wantedBy = [ "default.target" ];
       unitConfig.DefaultDependencies = "no";
       serviceConfig = {
         Type = "simple";
         ExecStart = pkgs.writeShellScript "tibs-service" ''
-          echo "Iniciando TIBS..."
           export OPENGL_DRIVER_PATH=${driversEnv}
-          echo "OPENGL_DRIVER_PATH=$OPENGL_DRIVER_PATH"
           ln -sfn $OPENGL_DRIVER_PATH /run/opengl-driver
-          ls /run/opengl-driver/
           LD_LIBRARY_PATH="${lib.getLib pkgs.libGL}/lib" ${tibs}/bin/tibs
         '';
       };
@@ -49,5 +46,6 @@ in {
     boot.consoleLogLevel = 0;
     boot.initrd.systemd.enable = true;
     boot.initrd.systemd.dbus.enable = true;
+    console.enable = false;
   };
 }

@@ -16,5 +16,15 @@
       src = ./.;
       alias.packages.default = "tibs";
       alias.modules.nixos.default = "tibs";
+      outputs-builder = channels: {
+        apps.run-vm = {
+          type = "app";
+          program = let runVmScript = channels.nixpkgs.writeShellScript "run-vm" ''
+            set -e
+            nix build .#nixosConfigurations.tibs-test-vm.config.system.build.vm
+            result/bin/run-tibs-test-vm-vm
+          ''; in "${runVmScript}";
+        };
+      };
     };
 }

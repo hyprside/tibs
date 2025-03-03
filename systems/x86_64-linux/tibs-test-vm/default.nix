@@ -1,10 +1,8 @@
 { inputs, pkgs, system, ... }: {
+  tibs.enable = true;
   imports = [
-    # inputs.self.nixosModules.tibs
     "${inputs.nixpkgs}/nixos/modules/virtualisation/qemu-vm.nix"
-    
   ];
-  # tibs.enable = true;
 
   services.qemuGuest.enable = true;
 
@@ -21,7 +19,6 @@
     git
     htop
     curl
-    inputs.self.packages.${system}.tibs
   ];
 
   boot.loader.systemd-boot.enable = true;
@@ -29,4 +26,7 @@
   hardware.graphics.enable = true;
   hardware.graphics.extraPackages = [ pkgs.mesa.drivers ];
   system.stateVersion = "25.05";
+  virtualisation.useEFIBoot = true;
+  virtualisation.useBootLoader = true;
+  virtualisation.qemu.options = ["-device" "virtio-gpu-gl" "-display" "gtk,gl=on" "-vga" "none" "-full-screen"];
 }
