@@ -165,6 +165,14 @@ dependencies = [
 ]
 
 [[package]]
+name = "clay-layout"
+version = "0.2.0"
+source = "git+https://github.com/coffeeispower/clay#1099ed060d37d29544cf307708d2b67d14f2ec2a"
+dependencies = [
+ "cc",
+]
+
+[[package]]
 name = "cmake"
 version = "0.1.54"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -989,6 +997,7 @@ dependencies = [
 name = "tibs"
 version = "0.1.0"
 dependencies = [
+ "clay-layout",
  "color-eyre",
  "drm",
  "gbm",

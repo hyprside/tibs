@@ -12,8 +12,9 @@ pub fn check_gl_error() {
                 gl::OUT_OF_MEMORY => "OUT_OF_MEMORY",
                 _ => "UNKNOWN_ERROR",
             };
-            print!("OpenGL Error: {}", error_message);
             let backtrace = std::backtrace::Backtrace::capture();
+            println!("OpenGL Error: {}", error_message);
+            println!("{:#?}", backtrace);
             error = gl::GetError();
         }
     }

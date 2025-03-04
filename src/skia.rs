@@ -1,5 +1,5 @@
 use color_eyre::eyre::bail;
-use skia_safe::{gpu::{backend_render_targets, ganesh::gl::direct_contexts, gl::{FramebufferInfo, Interface}, surfaces, DirectContext}, graphics, ColorSpace, Surface};
+use skia_safe::{gpu::{backend_render_targets, ganesh::gl::direct_contexts, gl::{FramebufferInfo, Interface}, surfaces, DirectContext}, ColorSpace, Surface};
 
 use crate::{gl, gles_context::GlesContext};
 
