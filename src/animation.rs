@@ -373,7 +373,7 @@ impl TargetAnimation {
     }
 }
 
-impl crate::Animation for TargetAnimation {
+impl Animation for TargetAnimation {
     /// Updates progress, moving `current` toward `target` based on the time delta.
     /// If there is a new value in the channel, updates `target`.
     fn update(&mut self, delta: f32) -> Vec<(String, f32)> {

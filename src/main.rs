@@ -1,27 +1,16 @@
 #![allow(unsafe_op_in_unsafe_fn)]
 
-use animation::{
-    // colors::{interpolate_color_normalized, rgb_to_norm},
-    easing,
-    Animation,
-    BasicAnimation,
-    DelayAnimation,
-    LoopingAnimation,
-};
-use clay_layout::{grow, Declaration};
-use clay_skia::clay_skia_render;
+use clay_layout::{grow, Declaration, renderers::clay_skia_render};
+use custom_elements::CustomElements;
 use gles_context::select_and_init_gles_context;
 use skia::{create_skia_surface, init_skia};
-mod clay_skia;
-pub mod fps_counter;
-pub mod gl;
-#[macro_use]
-pub mod gl_errors;
-pub mod animation;
-pub mod gles_context;
-pub mod skia;
+use smol::block_on;
+use tibs::*;
 
-fn main() -> color_eyre::Result<()> {
+#[macro_use]
+extern crate tibs;
+
+async fn async_main() -> color_eyre::Result<()> {
     color_eyre::install()?;
     let mut context = select_and_init_gles_context();
     let mut fps_counter = fps_counter::FPSCounter::new();
@@ -39,18 +28,21 @@ fn main() -> color_eyre::Result<()> {
 
         // Render
         gl!(gl::Clear(gl::COLOR_BUFFER_BIT | gl::DEPTH_BUFFER_BIT));
-        gl!(gl::ClearColor(0., 0., 0., 1.));
-        let mut c = clay.begin::<_, ()>();
+        let mut c = clay.begin::<_, custom_elements::CustomElements>();
 
         c.with(
             &Declaration::new()
-                .id(c.id("red_rectangle"))
+                .layout()
+                    .width(grow!())
+                    .height(grow!())
+                .end()
+                .custom_element(&CustomElements::LoadingScreenBackground)
                 .background_color((0xFF, 0x00, 0x00).into()),
-            |_| {},
+            |_| {}
         );
         
-        clay_skia_render(skia_surface.canvas(), c.end());
-        
+        clay_skia_render(skia_surface.canvas(), c.end(), CustomElements::render);
+        drop(c);
         skia_context.flush(None);
         context.swap_buffers();
 
@@ -60,8 +52,13 @@ fn main() -> color_eyre::Result<()> {
         if skia_surface.width() != screen_width as _ || skia_surface.height() != screen_height as _
         {
             skia_surface = create_skia_surface(&mut skia_context, screen_width, screen_height)?;
-            clay.layout_dimensions((screen_width as f32, screen_height as f32).into());
+            clay.set_layout_dimensions((screen_width as f32, screen_height as f32).into());
         }
     }
     Ok(())
+}
+
+
+fn main() -> color_eyre::Result<()> {
+    block_on(async_main())
 }
