@@ -10,7 +10,7 @@ pub enum CustomElements {
 impl CustomElements {
     pub fn render(command: &RenderCommand<'_, Image, Self>, custom: &Custom<'_, Self>, canvas: &skia_safe::Canvas) {
         let this = custom.data;
-        let BoundingBox {height, width, x, y} = command.bounding_box;
+        let BoundingBox { x, y, .. } = command.bounding_box;
         match this {
             Self::CheckMark(color) => {
                 let mut paint = skia_safe::Paint::default();

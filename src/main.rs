@@ -1,16 +1,12 @@
 #![allow(unsafe_op_in_unsafe_fn)]
 
 use assets_manager::AssetCache;
-use clay_layout::{grow, Declaration};
 use custom_elements::CustomElements;
 use gles_context::select_and_init_gles_context;
 use skia::{create_skia_surface, init_skia};
-use smol::block_on;
 use tibs::{loading_screen::LoadingScreen, skia_clay::clay_skia_render, skia_image_asset::SkiaImageAsset, *};
-#[macro_use]
-extern crate tibs;
 
-async fn async_main() -> color_eyre::Result<()> {
+fn main() -> color_eyre::Result<()> {
     color_eyre::install()?;
     let mut context = select_and_init_gles_context();
     let mut fps_counter = fps_counter::FPSCounter::new();
@@ -19,7 +15,7 @@ async fn async_main() -> color_eyre::Result<()> {
     let (mut skia_context, mut skia_surface) = init_skia(context.as_mut())?;
     let (screen_width, screen_height) = context.size();
     let mut clay = clay_layout::Clay::new((screen_width as f32, screen_height as f32).into());
-    let mut boot_progress = start_progress::ProgressWatcher::new()?;
+    let mut boot_progress = progress_watcher::ProgressWatcher::new()?;
     let assets = AssetCache::new(std::env::var("TIBS_ASSETS_FOLDER").unwrap_or("assets".into()))?;
     let mut loading_screen = LoadingScreen::new();
     while !context.should_close() {
@@ -55,9 +51,4 @@ async fn async_main() -> color_eyre::Result<()> {
         assets.hot_reload();
     }
     Ok(())
-}
-
-
-fn main() -> color_eyre::Result<()> {
-    block_on(async_main())
 }

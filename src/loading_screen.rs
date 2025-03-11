@@ -11,7 +11,7 @@ use crate::{
     },
     custom_elements::CustomElements,
     seq,
-    start_progress::ProgressData,
+    progress_watcher::ProgressData,
 };
 pub struct LoadingScreen {
     animation: ParallelAnimation,
