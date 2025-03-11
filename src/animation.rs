@@ -62,7 +62,6 @@
 
 use std::sync::mpsc::{self, Receiver, Sender};
 
-
 pub trait Animation {
     fn update(&mut self, delta: f32) -> Vec<(String, f32)>;
     fn is_finished(&self) -> bool;
@@ -409,7 +408,6 @@ impl Animation for ProgressBarAnimation {
         self.target = 0.0;
     }
 }
-
 
 // Some common easings for animation
 // I have no idea how any of this math works, but it works

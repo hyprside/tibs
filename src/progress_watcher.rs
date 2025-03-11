@@ -1,14 +1,17 @@
-use std::{collections::HashMap, sync::{
-    atomic::{AtomicBool, Ordering},
-    Arc,
-}};
+use futures_util::{FutureExt as _, StreamExt};
+use rand::Rng;
+use smol::channel;
+use std::thread;
+use std::time::Duration;
+use std::{
+    collections::HashMap,
+    sync::{
+        atomic::{AtomicBool, Ordering},
+        Arc,
+    },
+};
 use zbus_systemd::systemd1::{ManagerProxy, UnitProxy};
 use zbus_systemd::zbus::{self, Connection};
-use std::thread;
-use futures_util::{FutureExt as _, StreamExt};
-use smol::channel;
-use rand::Rng;
-use std::time::Duration;
 #[derive(Debug, Copy, Clone, PartialEq, Eq, PartialOrd, Ord)]
 pub enum ServiceState {
     Loading,
@@ -18,7 +21,7 @@ pub enum ServiceState {
 #[derive(Clone, Debug, Default)]
 pub struct ProgressData {
     pub services: HashMap<String, ServiceState>,
-    pub finished: bool
+    pub finished: bool,
 }
 
 impl ProgressData {
@@ -28,7 +31,11 @@ impl ProgressData {
         } else if self.services.is_empty() {
             0.0
         } else {
-            self.services.iter().filter(|(_, &s)| s > ServiceState::Loading).count() as f32 / self.services.len() as f32 
+            self.services
+                .iter()
+                .filter(|(_, &s)| s > ServiceState::Loading)
+                .count() as f32
+                / self.services.len() as f32
         }
     }
     pub fn has_failed_services(&self) -> bool {
@@ -103,7 +110,7 @@ impl ProgressWatcher {
                                     eprintln!("Failed to get JobRemoved event args");
                                     continue;
                                 };
-                                
+
                                 progress_data.services.insert(args.unit, match args.result.as_str() {
                                     "done" | "dependency" | "skipped" => ServiceState::Loaded,
                                     "canceled" | "timeout" | "failed" => ServiceState::Failed,
@@ -143,8 +150,14 @@ impl ProgressWatcher {
     }
 }
 
-async fn fake_progress_bar(tx: &channel::Sender<ProgressData>, shutdown_clone: &Arc<AtomicBool>, progress_data: &mut ProgressData) {
-    let service_names = (0..100).map(|i| format!("fake{i}.service")).collect::<Vec<String>>();
+async fn fake_progress_bar(
+    tx: &channel::Sender<ProgressData>,
+    shutdown_clone: &Arc<AtomicBool>,
+    progress_data: &mut ProgressData,
+) {
+    let service_names = (0..100)
+        .map(|i| format!("fake{i}.service"))
+        .collect::<Vec<String>>();
 
     if progress_data.services.is_empty() {
         progress_data.services = service_names
@@ -170,7 +183,11 @@ async fn fake_progress_bar(tx: &channel::Sender<ProgressData>, shutdown_clone: &
                 }
             }
         }
-        if progress_data.services.values().all(|s| *s != ServiceState::Loading) {
+        if progress_data
+            .services
+            .values()
+            .all(|s| *s != ServiceState::Loading)
+        {
             progress_data.finished = true;
         }
         if tx.send(progress_data.clone()).await.is_err() {

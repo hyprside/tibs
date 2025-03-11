@@ -1,16 +1,25 @@
 use color_eyre::eyre::bail;
-use skia_safe::{gpu::{backend_render_targets, ganesh::gl::direct_contexts, gl::{FramebufferInfo, Interface}, surfaces, DirectContext}, ColorSpace, Surface};
+use skia_safe::{
+    gpu::{
+        backend_render_targets,
+        ganesh::gl::direct_contexts,
+        gl::{FramebufferInfo, Interface},
+        surfaces, DirectContext,
+    },
+    ColorSpace, Surface,
+};
 
 use crate::{gl, gles_context::GlesContext};
 
 pub const FRAMEBUFFER_INFO: FramebufferInfo = FramebufferInfo {
     fboid: 0,
     format: gl::RGBA8,
-    protected: skia_safe::gpu::Protected::No
+    protected: skia_safe::gpu::Protected::No,
 };
 
 pub fn init_skia(context: &mut dyn GlesContext) -> color_eyre::Result<(DirectContext, Surface)> {
-    let Some(interface) = Interface::new_load_with(|fn_name| context.get_proc_address(fn_name)) else {
+    let Some(interface) = Interface::new_load_with(|fn_name| context.get_proc_address(fn_name))
+    else {
         bail!("Failed to initialize skia (interface)");
     };
     let Some(mut skia_context) = direct_contexts::make_gl(interface, None) else {

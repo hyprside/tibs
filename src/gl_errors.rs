@@ -1,6 +1,5 @@
 use crate::gl;
 
-
 pub fn check_gl_error() {
     unsafe {
         let mut error = gl::GetError();

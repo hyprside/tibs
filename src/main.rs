@@ -6,17 +6,18 @@ use assets_manager::AssetCache;
 use custom_elements::CustomElements;
 use gles_context::select_and_init_gles_context;
 use skia::{create_skia_surface, init_skia};
-use skia_safe::{Font, FontMgr, FontStyle, GlyphId, Paint, Rect, Size, Typeface};
-use tibs::{loading_screen::LoadingScreen, skia_clay::clay_skia_render, *};
-
+use skia_safe::{FontMgr, FontStyle, Typeface};
+use tibs::{
+    loading_screen::LoadingScreen,
+    skia_clay::{clay_skia_render, create_measure_text_function},
+    *,
+};
 static UBUNTU_FONT: LazyLock<Typeface> = LazyLock::new(|| {
-    let font_mgr = FontMgr::new();
-    dbg!(font_mgr.family_names().collect::<Vec<_>>());
-    font_mgr
+    FontMgr::new()
         .match_family_style("UbuntuSans NF", FontStyle::normal())
-        .expect("Não foi possível carregar o tipo de letra")
+        .unwrap()
 });
-
+static FONTS: LazyLock<Vec<&Typeface>> = LazyLock::new(|| vec![&UBUNTU_FONT]);
 fn main() -> color_eyre::Result<()> {
     color_eyre::install()?;
     let mut context = select_and_init_gles_context();
@@ -25,13 +26,10 @@ fn main() -> color_eyre::Result<()> {
     let mut last_time = std::time::Instant::now();
     let (mut skia_context, mut skia_surface) = init_skia(context.as_mut())?;
     let (screen_width, screen_height) = context.size();
-    let mut clay = ManuallyDrop::new(clay_layout::Clay::new((screen_width as f32, screen_height as f32).into()));
-    clay.set_measure_text_function(|text, text_config| {
-        let font = Font::new(UBUNTU_FONT.clone(), text_config.font_size as f32);
-        let width = font.measure_str(text, None).0;
-        dbg!(text, width);
-        (width, font.metrics().1.bottom - font.metrics().1.top).into()
-    });
+    let mut clay = ManuallyDrop::new(clay_layout::Clay::new(
+        (screen_width as f32, screen_height as f32).into(),
+    ));
+    clay.set_measure_text_function(create_measure_text_function(&FONTS));
     let mut boot_progress = progress_watcher::ProgressWatcher::new()?;
     let assets = AssetCache::new(std::env::var("TIBS_ASSETS_FOLDER").unwrap_or("assets".into()))?;
     let mut loading_screen = LoadingScreen::new(&assets);
@@ -54,7 +52,7 @@ fn main() -> color_eyre::Result<()> {
             skia_surface.canvas(),
             c.end(),
             CustomElements::render,
-            &[&UBUNTU_FONT],
+            &FONTS,
         );
         drop(c);
         skia_context.flush(None);
