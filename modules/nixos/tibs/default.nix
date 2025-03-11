@@ -22,8 +22,8 @@ in {
     assetsDir = mkOption {
       type = types.path;
       default = ../../../assets;
-      description = "Path of the assets folder that tibs will use"
-    }
+      description = "Path of the assets folder that tibs will use";
+    };
   };
 
   config = mkIf config.tibs.enable {
