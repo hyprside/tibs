@@ -1,27 +1,34 @@
-use std::{collections::HashSet, sync::{
+use std::{collections::HashMap, sync::{
     atomic::{AtomicBool, Ordering},
     Arc,
 }};
-use zbus_systemd::systemd1::{ManagerProxy, TargetProxy, UnitProxy};
+use zbus_systemd::systemd1::{ManagerProxy, UnitProxy};
 use zbus_systemd::zbus::{self, Connection};
 use std::thread;
 use futures_util::{FutureExt as _, StreamExt};
 use smol::channel;
+use rand::Rng;
+use std::time::Duration;
+#[derive(Debug, Copy, Clone, PartialEq, Eq, PartialOrd, Ord)]
+pub enum ServiceState {
+    Loading,
+    Failed,
+    Loaded,
+}
 #[derive(Clone, Debug, Default)]
 pub struct ProgressData {
-    pub total: HashSet<String>,
-    pub active: HashSet<String>,
-    pub failed: HashSet<String>,
+    pub services: HashMap<String, ServiceState>,
     pub finished: bool
 }
 
-
 impl ProgressData {
-    pub fn get_percentage(&self) -> f64 {
-        if self.total.is_empty() {
+    pub fn get_percentage(&self) -> f32 {
+        if self.finished {
+            1.0
+        } else if self.services.is_empty() {
             0.0
         } else {
-            (((self.active.len() + self.failed.len()) as f64) / self.total.len() as f64) * 100.0
+            self.services.iter().filter(|(_, &s)| s > ServiceState::Loading).count() as f32 / self.services.len() as f32 
         }
     }
 }
@@ -41,7 +48,12 @@ impl ProgressWatcher {
 
         let handle = thread::spawn(move || {
             smol::block_on(async {
+
                 let mut progress_data = ProgressData::default();
+                if matches!(std::env::var("TIBS_DEBUG_FAKE_PROGRESS_BAR"), Ok(s) if s == "1") {
+                    fake_progress_bar(&tx, &shutdown_clone, &mut progress_data).await;
+                    return Ok(());
+                }
                 let connection = Connection::system().await?;
                 let manager = ManagerProxy::new(&connection).await?;
                 let default_target_path = manager.get_unit(manager.get_default_target().await?).await?;
@@ -51,10 +63,10 @@ impl ProgressWatcher {
                     return Ok(());
                 }
                 let jobs = manager.list_jobs().await?;
-                progress_data.total = jobs
+                progress_data.services = jobs
                     .iter()
                     .filter(|job| job.3 != "done")
-                    .map(|job| job.2.clone())
+                    .map(|job| (job.2.clone(), ServiceState::Loading))
                     .collect();
                 let _ = tx.send(progress_data.clone()).await;
 
@@ -74,7 +86,7 @@ impl ProgressWatcher {
                                     eprintln!("Failed to get JobNew event args");
                                     continue;
                                 };
-                                progress_data.total.insert(args.unit);
+                                progress_data.services.insert(args.unit, ServiceState::Loading);
                                 if tx.send(progress_data.clone()).await.is_err() {
                                     break;
                                 };
@@ -86,7 +98,12 @@ impl ProgressWatcher {
                                     eprintln!("Failed to get JobRemoved event args");
                                     continue;
                                 };
-                                progress_data.active.insert(args.unit);
+                                
+                                progress_data.services.insert(args.unit, match args.result.as_str() {
+                                    "done" | "dependency" | "skipped" => ServiceState::Loaded,
+                                    "canceled" | "timeout" | "failed" => ServiceState::Failed,
+                                    _ => panic!("WOT??")
+                                });
                                 if tx.send(progress_data.clone()).await.is_err() {
                                     break;
                                 }
@@ -108,12 +125,7 @@ impl ProgressWatcher {
 
         Ok(ProgressWatcher {
             progress_rx: rx,
-            progress_data: ProgressData {
-                total: HashSet::new(),
-                active: HashSet::new(),
-                failed: HashSet::new(),
-                finished: true
-            },
+            progress_data: ProgressData::default(),
             shutdown,
             handle: Some(handle),
         })
@@ -123,6 +135,43 @@ impl ProgressWatcher {
             self.progress_data = new_progress;
         }
         &self.progress_data
+    }
+}
+
+async fn fake_progress_bar(tx: &channel::Sender<ProgressData>, shutdown_clone: &Arc<AtomicBool>, progress_data: &mut ProgressData) {
+    let service_names = (0..100).map(|i| format!("fake{i}.service")).collect::<Vec<String>>();
+
+    if progress_data.services.is_empty() {
+        progress_data.services = service_names
+            .into_iter()
+            .map(|s| (s.to_string(), ServiceState::Loading))
+            .collect();
+    }
+    let simulate_failure = std::env::var("TIBS_SIMULATE_BOOT_FAILURE").is_ok_and(|s| s == "1");
+    let mut rng = rand::rng();
+
+    while !shutdown_clone.load(Ordering::Relaxed) && !progress_data.finished {
+        for (_, state) in progress_data.services.iter_mut() {
+            if *state == ServiceState::Loading {
+                let chance: u8 = rng.random_range(0..100);
+                if simulate_failure {
+                    if chance < 10 {
+                        *state = ServiceState::Failed;
+                    } else if chance < 50 {
+                        *state = ServiceState::Loaded;
+                    }
+                } else if chance < 50 {
+                    *state = ServiceState::Loaded;
+                }
+            }
+        }
+        if progress_data.services.values().all(|s| *s != ServiceState::Loading) {
+            progress_data.finished = true;
+        }
+        if tx.send(progress_data.clone()).await.is_err() {
+            break;
+        }
+        smol::Timer::after(Duration::from_secs(1)).await;
     }
 }
 

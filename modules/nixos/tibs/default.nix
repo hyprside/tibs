@@ -19,6 +19,11 @@ in {
       default = false;
       description = "Activate Tiago's Incredible Boot Screen";
     };
+    assetsDir = mkOption {
+      type = types.path;
+      default = ../../../assets;
+      description = "Path of the assets folder that tibs will use"
+    }
   };
 
   config = mkIf config.tibs.enable {
@@ -39,7 +44,7 @@ in {
         ExecStart = pkgs.writeShellScript "tibs-service" ''
           export OPENGL_DRIVER_PATH=${driversEnv}
           ln -sfn $OPENGL_DRIVER_PATH /run/opengl-driver
-          LD_LIBRARY_PATH="${lib.getLib pkgs.libGL}/lib" ${tibs}/bin/tibs
+          TIBS_ASSETS_FOLDER="${config.tibs.assetsDir}" LD_LIBRARY_PATH="${lib.getLib pkgs.libGL}/lib" ${tibs}/bin/tibs
         '';
       };
     };

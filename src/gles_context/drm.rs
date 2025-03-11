@@ -47,9 +47,7 @@ impl Card {
             let Some(egl_device) = devices.next() else {
                 break Err(color_eyre::eyre::eyre!("No device found"));
             };
-            dbg!(&egl_device);
-            dbg!(egl_device.drm_render_device_node_path());
-            let Some(drm) = dbg!(egl_device.drm_device_node_path()) else {
+            let Some(drm) = egl_device.drm_device_node_path() else {
                 continue;
             };
             break Self::open(drm.as_os_str().to_str().unwrap()).map_err(Into::into);

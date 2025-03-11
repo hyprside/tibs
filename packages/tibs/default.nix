@@ -10,7 +10,7 @@
   };
 in
   crane.buildPackage {
-    src = ./../..;
+    src = crane.cleanCargoSource ./../..;
     
     # Add extra inputs here or any other derivation settings
     buildInputs = with pkgs; [

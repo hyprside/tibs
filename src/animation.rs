@@ -349,7 +349,7 @@ impl Animation for BackAndForthAnimation {
     }
 }
 
-pub struct TargetAnimation {
+pub struct ProgressBarAnimation {
     id: String,
     current: f32,
     target: f32,
@@ -357,8 +357,8 @@ pub struct TargetAnimation {
     receiver: Receiver<f32>, // Channel to receive new target values
 }
 
-impl TargetAnimation {
-    /// Creates a new TargetAnimation and returns a tuple (TargetAnimation, Sender<f32>).
+impl ProgressBarAnimation {
+    /// Creates a new ProgressBarAnimation and returns a tuple (ProgressBarAnimation, Sender<f32>).
     /// The `Sender<f32>` allows modifying the target value externally.
     pub fn new(id: &str, speed: f32) -> (Self, Sender<f32>) {
         let (sender, receiver) = mpsc::channel();
@@ -373,28 +373,29 @@ impl TargetAnimation {
     }
 }
 
-impl Animation for TargetAnimation {
+impl Animation for ProgressBarAnimation {
     /// Updates progress, moving `current` toward `target` based on the time delta.
     /// If there is a new value in the channel, updates `target`.
     fn update(&mut self, delta: f32) -> Vec<(String, f32)> {
         // Checks if there’s a new target value in the channel and updates if available
-        if let Ok(new_target) = self.receiver.try_recv() {
+        while let Ok(new_target) = self.receiver.try_recv() {
             self.target = new_target.clamp(0.0, 1.0);
         }
 
         // Moves current smoothly toward target
-        if self.current < self.target {
-            self.current = (self.current + self.speed * delta).min(self.target);
-        } else if self.current > self.target {
-            self.current = (self.current - self.speed * delta).max(self.target);
+        // and slow down as it approaches the target (ease out)
+        let diff = self.target - self.current;
+        let smoothing = 1.0 - (-self.speed * delta).exp();
+        self.current += diff * smoothing;
+        if self.current >= 0.995 {
+            self.current = 1.0
         }
-
         vec![(self.id.clone(), self.current)]
     }
 
-    /// Considers the animation finished if the current progress matches the target within a small margin.
+    /// Considers the animation finished if the current progress is close to the end
     fn is_finished(&self) -> bool {
-        (self.current - self.target).abs() < 1e-5
+        self.current >= 0.995 && self.target == 1.0
     }
 
     /// Returns `true` if the progress has started (i.e., if current > 0).
@@ -635,7 +636,7 @@ mod tests {
 macro_rules! all {
     ( $( $x:expr ),* ) => {
         {
-            let mut animations: Vec<Box<dyn Animation>> = Vec::new();
+            let mut animations: Vec<Box<dyn $crate::animation::Animation>> = Vec::new();
             $(
                 animations.push(Box::new($x));
             )*
@@ -648,7 +649,7 @@ macro_rules! all {
 macro_rules! seq {
     ( $( $x:expr ),* ) => {
         {
-            let mut animations: Vec<Box<dyn Animation>> = Vec::new();
+            let mut animations: Vec<Box<dyn $crate::animation::Animation>> = Vec::new();
             $(
                 animations.push(Box::new($x));
             )*

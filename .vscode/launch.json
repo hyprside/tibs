@@ -12,7 +12,9 @@
                 "args": [
                     "build",
                     "--bin=tibs",
-                    "--package=tibs"
+                    "--package=tibs",
+                    "-F",
+                    "glfw"
                 ],
                 "filter": {
                     "name": "tibs",

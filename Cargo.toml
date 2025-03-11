@@ -14,6 +14,8 @@ skia-safe = { version = "0.82.0", features = ["gl"] }
 smol = "2.0.2"
 zbus_systemd = { version = "0.25701.0", features = ["systemd1"] }
 futures-util = "0.3.31"
+assets_manager = { version = "0.12.4", features = ["hot-reloading"] }
+rand = "0.9.0"
 
 
 [dependencies.clay-layout]
