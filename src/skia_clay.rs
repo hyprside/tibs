@@ -1,7 +1,7 @@
-use clay_layout::math::BoundingBox;
+use clay_layout::math::{BoundingBox, Dimensions};
 use clay_layout::render_commands::{Custom, RenderCommand, RenderCommandConfig};
-use clay_layout::Color as ClayColor;
-use skia_safe::{Canvas, ClipOp, Color, Font, Image, Paint, Point, RRect, Rect};
+use clay_layout::{ClayLayoutScope, Color as ClayColor};
+use skia_safe::{Canvas, ClipOp, Color, Font, Image, Paint, Point, RRect, Rect, SamplingOptions, Typeface};
 
 pub fn clay_to_skia_color(color: ClayColor) -> Color {
     Color::from_argb(
@@ -20,16 +20,16 @@ pub fn clay_skia_render<'a, CustomElementData: 'a>(
     canvas: &Canvas,
     render_commands: impl Iterator<Item = RenderCommand<'a, Image, CustomElementData>>,
     mut render_custom_element: impl FnMut(&RenderCommand<'a, Image, CustomElementData>, &Custom<'a, CustomElementData>, &Canvas),
+    fonts: &[&Typeface]
 ) {
     for command in render_commands {
         match command.config {
             RenderCommandConfig::Text(text) => {
                 let text_data = text.text;
-                let pos = Point::new(command.bounding_box.x, command.bounding_box.y);
                 let mut paint = Paint::default();
                 paint.set_color(clay_to_skia_color(text.color));
-                let mut font = Font::default();
-                font.set_size(text.font_size as f32);
+                let font = Font::new(fonts[text.font_id as usize].clone(), text.font_size as f32);
+                let pos = Point::new(command.bounding_box.x, command.bounding_box.y + text.font_size as f32);
                 canvas.draw_str(&text_data, pos, &font, &paint);
             }
 
@@ -37,11 +37,14 @@ pub fn clay_skia_render<'a, CustomElementData: 'a>(
                 let skia_image = image.data;
                 let mut paint = Paint::default();
                 paint.set_color(Color::WHITE);
-                canvas.draw_image_rect(
+                paint.set_anti_alias(true);
+                
+                canvas.draw_image_rect_with_sampling_options(
                     skia_image,
                     None,
                     clay_to_skia_rect(command.bounding_box),
-                    &paint,
+                    SamplingOptions::new(skia_safe::FilterMode::Linear, skia_safe::MipmapMode::Linear),
+                    &paint
                 );
             }
 
@@ -234,4 +237,13 @@ pub fn clay_skia_render<'a, CustomElementData: 'a>(
             RenderCommandConfig::None() => {}
         }
     }
+}
+
+
+
+pub type SkiaClayScope<'clay, 'render, CustomElements> = ClayLayoutScope<'clay, 'render, Image, CustomElements>;
+
+
+pub fn get_source_dimensions_from_skia_image(image: &Image) -> Dimensions {
+    (image.width() as f32, image.height() as f32).into()
 }

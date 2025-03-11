@@ -70,7 +70,7 @@ pub trait Animation {
     fn reset(&mut self);
 }
 
-pub struct BasicAnimation<F>
+pub struct BasicAnimation<F = fn(f32) -> f32>
 where
     F: Fn(f32) -> f32,
 {

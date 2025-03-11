@@ -1,23 +1,40 @@
 #![allow(unsafe_op_in_unsafe_fn)]
 
+use std::{mem::ManuallyDrop, sync::LazyLock};
+
 use assets_manager::AssetCache;
 use custom_elements::CustomElements;
 use gles_context::select_and_init_gles_context;
 use skia::{create_skia_surface, init_skia};
-use tibs::{loading_screen::LoadingScreen, skia_clay::clay_skia_render, skia_image_asset::SkiaImageAsset, *};
+use skia_safe::{Font, FontMgr, FontStyle, GlyphId, Paint, Rect, Size, Typeface};
+use tibs::{loading_screen::LoadingScreen, skia_clay::clay_skia_render, *};
+
+static UBUNTU_FONT: LazyLock<Typeface> = LazyLock::new(|| {
+    let font_mgr = FontMgr::new();
+    dbg!(font_mgr.family_names().collect::<Vec<_>>());
+    font_mgr
+        .match_family_style("UbuntuSans NF", FontStyle::normal())
+        .expect("Não foi possível carregar o tipo de letra")
+});
 
 fn main() -> color_eyre::Result<()> {
     color_eyre::install()?;
     let mut context = select_and_init_gles_context();
     let mut fps_counter = fps_counter::FPSCounter::new();
-    
+
     let mut last_time = std::time::Instant::now();
     let (mut skia_context, mut skia_surface) = init_skia(context.as_mut())?;
     let (screen_width, screen_height) = context.size();
-    let mut clay = clay_layout::Clay::new((screen_width as f32, screen_height as f32).into());
+    let mut clay = ManuallyDrop::new(clay_layout::Clay::new((screen_width as f32, screen_height as f32).into()));
+    clay.set_measure_text_function(|text, text_config| {
+        let font = Font::new(UBUNTU_FONT.clone(), text_config.font_size as f32);
+        let width = font.measure_str(text, None).0;
+        dbg!(text, width);
+        (width, font.metrics().1.bottom - font.metrics().1.top).into()
+    });
     let mut boot_progress = progress_watcher::ProgressWatcher::new()?;
     let assets = AssetCache::new(std::env::var("TIBS_ASSETS_FOLDER").unwrap_or("assets".into()))?;
-    let mut loading_screen = LoadingScreen::new();
+    let mut loading_screen = LoadingScreen::new(&assets);
     while !context.should_close() {
         let (screen_width, screen_height) = context.size();
         let current_time = std::time::Instant::now();
@@ -26,16 +43,19 @@ fn main() -> color_eyre::Result<()> {
 
         // Render
         gl!(gl::Clear(gl::COLOR_BUFFER_BIT | gl::DEPTH_BUFFER_BIT));
-        let loading_logo = assets.load_expect::<SkiaImageAsset>("logo");
-        let loading_logo = &**loading_logo.read();
         let mut c = clay.begin::<_, custom_elements::CustomElements>();
         let progress = boot_progress.poll_progress();
         if !progress.finished || true {
-            loading_screen.render(progress, &mut c, Some(loading_logo), delta);
+            loading_screen.render(progress, &mut c, delta);
         } else {
             todo!();
         }
-        clay_skia_render(skia_surface.canvas(), c.end(), CustomElements::render);
+        clay_skia_render(
+            skia_surface.canvas(),
+            c.end(),
+            CustomElements::render,
+            &[&UBUNTU_FONT],
+        );
         drop(c);
         skia_context.flush(None);
         context.swap_buffers();
@@ -48,7 +68,6 @@ fn main() -> color_eyre::Result<()> {
             skia_surface = create_skia_surface(&mut skia_context, screen_width, screen_height)?;
             clay.set_layout_dimensions((screen_width as f32, screen_height as f32).into());
         }
-        assets.hot_reload();
     }
     Ok(())
 }

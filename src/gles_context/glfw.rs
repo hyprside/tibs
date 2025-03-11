@@ -1,13 +1,14 @@
 use glfw::{Action, Context, Glfw, Key, PWindow, WindowHint};
 use std::cell::RefCell;
 use std::ffi::c_void;
+use std::rc::Rc;
 use crate::gl;
 
 use super::GlesContext;
 
 pub struct GlfwGlesContext {
     glfw: RefCell<Glfw>,
-    window: RefCell<PWindow>
+    window: Rc<RefCell<PWindow>>
 }
 
 impl GlfwGlesContext {
@@ -29,10 +30,13 @@ impl GlfwGlesContext {
         window.set_cursor_mode(glfw::CursorMode::Hidden);
         let mut context = GlfwGlesContext {
             glfw: RefCell::new(glfw),
-            window: RefCell::new(window)
+            window: Rc::new(RefCell::new(window))
         };
         gl::load_with(|symbol| context.get_proc_address(symbol));
         context
+    }
+    pub fn glfw_window(&self) -> Rc<RefCell<PWindow>> {
+        Rc::clone(&self.window)
     }
 }
 

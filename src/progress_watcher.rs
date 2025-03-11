@@ -31,6 +31,11 @@ impl ProgressData {
             self.services.iter().filter(|(_, &s)| s > ServiceState::Loading).count() as f32 / self.services.len() as f32 
         }
     }
+    pub fn has_failed_services(&self) -> bool {
+        self.services
+            .iter()
+            .any(|(_, &s)| s == ServiceState::Failed)
+    }
 }
 
 pub struct ProgressWatcher {
