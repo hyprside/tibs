@@ -54,6 +54,14 @@ in {
     systemd.services.dbus.unitConfig.DefaultDependencies = "no";
     systemd.sockets.dbus.unitConfig.DefaultDependencies = "no";
     systemd.services.dbus-broker.unitConfig.DefaultDependencies = "no";
+    services.xserver.displayManager.xpra.enable = false;
+    services.xserver.displayManager.sx.enable = false;
+    services.xserver.displayManager.startx.enable = false;
+    services.xserver.displayManager.lightdm.enable = false;
+    services.xserver.displayManager.gdm.enable = false;
+    services.displayManager.sddm.enable = false;
+    services.displayManager.ly.enable = false;
+    services.displayManager.autoLogin.enable = false;
     boot.initrd.systemd.enable = true;
     console.enable = false;
   };
