@@ -113,13 +113,13 @@ impl LoadingScreen {
                     |_| {},
                 );
                 self.progress_bar(progress, end_progress_animation, leading_icon, c);
-                // if progress.has_failed_services() && progress.finished {
-                c.with(
-                    Declaration::new().layout().height(fixed!(22.0)).end(),
-                    |_| {},
-                );
-                self.warning(c, end_progress_animation);
-                // }
+                if progress.has_failed_services() && progress.finished {
+                    c.with(
+                        Declaration::new().layout().height(fixed!(22.0)).end(),
+                        |_| {},
+                    );
+                    self.warning(c, end_progress_animation);
+                }
             },
         );
     }
