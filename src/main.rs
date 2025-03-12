@@ -20,6 +20,7 @@ static UBUNTU_FONT: LazyLock<Typeface> = LazyLock::new(|| {
 static FONTS: LazyLock<Vec<&Typeface>> = LazyLock::new(|| vec![&UBUNTU_FONT]);
 fn main() -> color_eyre::Result<()> {
     color_eyre::install()?;
+    let mut boot_progress = progress_watcher::ProgressWatcher::new();
     let mut context = select_and_init_gles_context();
     let mut fps_counter = fps_counter::FPSCounter::new();
 
@@ -30,7 +31,6 @@ fn main() -> color_eyre::Result<()> {
         (screen_width as f32, screen_height as f32).into(),
     ));
     clay.set_measure_text_function(create_measure_text_function(&FONTS));
-    let mut boot_progress = progress_watcher::ProgressWatcher::new()?;
     let assets = AssetCache::new(std::env::var("TIBS_ASSETS_FOLDER").unwrap_or("assets".into()))?;
     let mut loading_screen = LoadingScreen::new(&assets);
     while !context.should_close() {

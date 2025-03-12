@@ -53,7 +53,7 @@ pub struct ProgressWatcher {
 }
 
 impl ProgressWatcher {
-    pub fn new() -> zbus::Result<Self> {
+    pub fn new() -> Self {
         let (tx, rx) = channel::unbounded::<ProgressData>();
         let shutdown = Arc::new(AtomicBool::new(false));
         let shutdown_clone = Arc::clone(&shutdown);
@@ -68,6 +68,10 @@ impl ProgressWatcher {
                 }
                 let connection = Connection::system().await?;
                 let manager = ManagerProxy::new(&connection).await?;
+                // Subscribe to job new and job removed signals.
+                let mut job_new_stream = manager.receive_job_new().await?;
+                let mut job_removed_stream = manager.receive_job_removed().await?;
+                let mut system_started_up = manager.receive_startup_finished().await?;
                 let default_target_path = manager.get_unit(manager.get_default_target().await?).await?;
                 let default_target = UnitProxy::new(&connection, default_target_path).await?;
                 if default_target.active_state().await? == "active" {
@@ -82,10 +86,6 @@ impl ProgressWatcher {
                     .collect();
                 let _ = tx.send(progress_data.clone()).await;
 
-                // Subscribe to job new and job removed signals.
-                let mut job_new_stream = manager.receive_job_new().await?;
-                let mut job_removed_stream = manager.receive_job_removed().await?;
-                let mut system_started_up = manager.receive_startup_finished().await?;
 
                 loop {
                     if shutdown_clone.load(Ordering::Relaxed) {
@@ -98,7 +98,9 @@ impl ProgressWatcher {
                                     eprintln!("Failed to get JobNew event args");
                                     continue;
                                 };
-                                progress_data.services.insert(args.unit, ServiceState::Loading);
+                                if !progress_data.services.contains_key(&args.unit) {
+                                    progress_data.services.insert(args.unit, ServiceState::Loading);
+                                }
                                 if tx.send(progress_data.clone()).await.is_err() {
                                     break;
                                 };
@@ -135,12 +137,12 @@ impl ProgressWatcher {
             }).unwrap();
         });
 
-        Ok(ProgressWatcher {
+        ProgressWatcher {
             progress_rx: rx,
             progress_data: ProgressData::default(),
             shutdown,
             handle: Some(handle),
-        })
+        }
     }
     pub fn poll_progress(&mut self) -> &ProgressData {
         if let Some(new_progress) = self.progress_rx.try_recv().ok() {
