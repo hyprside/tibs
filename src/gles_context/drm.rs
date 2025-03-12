@@ -2,6 +2,7 @@ pub use drm::control::Device as ControlDevice;
 pub use drm::Device;
 use std::ffi::CString;
 use std::ptr::NonNull;
+use std::time::Duration;
 
 use drm::control::{connector, crtc, Mode};
 use gbm::{AsRaw, BufferObjectFlags};
@@ -43,18 +44,24 @@ impl Card {
 
     pub fn open_global() -> Self {
         let mut devices = egl::device::Device::query_devices().expect("Failed to query devices");
+        let started_time = std::time::Instant::now();
         loop {
             let Some(egl_device) = devices.next() else {
-                break Err(color_eyre::eyre::eyre!("No device found"));
+                if started_time.elapsed().as_secs() < 5 {
+                    println!("Failed to find device, trying again in 50ms");
+                    devices =
+                        egl::device::Device::query_devices().expect("Failed to query devices");
+
+                    std::thread::sleep(Duration::from_millis(50));
+                    continue;
+                }
+                panic!("No device found (waited for 5s)");
             };
             let Some(drm) = egl_device.drm_device_node_path() else {
                 continue;
             };
-            break Self::open(drm.as_os_str().to_str().unwrap()).map_err(Into::into);
+            break Self::open(drm.as_os_str().to_str().unwrap()).unwrap();
         }
-        .or_else(|_| Self::open("/dev/dri/card1").map_err(color_eyre::eyre::Report::from))
-        .or_else(|_| Self::open("/dev/dri/card0").map_err(color_eyre::eyre::Report::from))
-        .unwrap()
     }
 
     pub fn initialize_egl(self) -> DrmGlesContext {
