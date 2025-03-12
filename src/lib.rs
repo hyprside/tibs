@@ -1,11 +1,10 @@
-use custom_elements::CustomElements;
 use skia_clay::SkiaClayScope;
 
 pub mod custom_elements;
 pub mod fps_counter;
 pub mod gl;
-#[macro_use]
 pub mod gl_errors;
+#[macro_use]
 pub mod animation;
 pub mod gles_context;
 pub mod loading_screen;

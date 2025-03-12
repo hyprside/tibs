@@ -27,9 +27,9 @@
 //! ## Example Usage
 //!
 //! ```rust
-//! use crate::animation::{Animation, BasicAnimation, SequenceAnimation, ParallelAnimation, DelayAnimation};
-//! use crate::animation::easing::{linear, ease_in_out_cubic};
-//! use crate::animation::{seq, all};
+//! use tibs::animation::{Animation, BasicAnimation, SequenceAnimation, ParallelAnimation, DelayAnimation};
+//! use tibs::animation::easing::{linear, ease_in_out_cubic};
+//! use tibs::{seq, all};
 //!
 //! // Create basic animations
 //! let anim1 = BasicAnimation::new("fade_in", 2.0, linear);
