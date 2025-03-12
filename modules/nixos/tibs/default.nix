@@ -34,11 +34,13 @@ in {
       }
     ];
     boot.kernelParams = mkForce ["quiet" "loglevel=0" "systemd.show_status=0" "udev.log_level=3" "vt.global_cursor_default=0"];
-    systemd.services.tibs = {
+    systemd.services.tibs = rec {
       description = "Tiago's Incredible Boot Screen";
       before = [ "display-manager.target" "multi-user.target" "basic.target" ];
       wantedBy = [ "default.target" ];
       unitConfig.DefaultDependencies = "no";
+      requires = ["dbus.service" "dbus-broker.service"];
+      after = requires;
       serviceConfig = {
         Type = "simple";
         ExecStart = pkgs.writeShellScript "tibs-service" ''
@@ -49,8 +51,10 @@ in {
       };
     };
     boot.consoleLogLevel = 0;
+    systemd.services.dbus.unitConfig.DefaultDependencies = "no";
+    systemd.sockets.dbus.unitConfig.DefaultDependencies = "no";
+    systemd.services.dbus-broker.unitConfig.DefaultDependencies = "no";
     boot.initrd.systemd.enable = true;
-    boot.initrd.systemd.dbus.enable = true;
     console.enable = false;
   };
 }
