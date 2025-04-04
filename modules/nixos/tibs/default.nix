@@ -49,9 +49,22 @@ in {
       serviceConfig = {
         Type = "simple";
         ExecStart = pkgs.writeShellScript "tibs-service" ''
+          log_dmesg() {
+              echo "Tibs crashed:"
+              echo "=== Kernel logs ==="
+              ${pkgs.util-linux}/bin/dmesg | tail -n 50
+          }
           export OPENGL_DRIVER_PATH=${driversEnv}
           ln -sfn $OPENGL_DRIVER_PATH /run/opengl-driver
           TIBS_ASSETS_FOLDER="${config.tibs.assetsDir}" LD_LIBRARY_PATH="${lib.getLib pkgs.libGL}/lib" ${config.tibs.tibsPath}
+          exit_code=$?
+
+          if [ $exit_code -eq 139 ]; then
+              echo "Tibs segfaulted" >&2
+              log_dmesg | ${pkgs.systemd}/bin/systemd-cat -t tibs-crash
+          else
+              echo "Tibs exited with code $exit_code" | ${pkgs.systemd}/bin/systemd-cat -t tibs-crash
+          fi
         ''; 
       };
     };
