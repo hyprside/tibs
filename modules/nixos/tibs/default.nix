@@ -24,6 +24,11 @@ in {
       default = ../../../assets;
       description = "Path of the assets folder that tibs will use";
     };
+    tibsPath = mkOption {
+      type = types.path;
+      default = "${tibs}/bin/tibs";
+      description = "Path to the tibs binary";
+    };
   };
 
   config = mkIf config.tibs.enable {
@@ -46,8 +51,8 @@ in {
         ExecStart = pkgs.writeShellScript "tibs-service" ''
           export OPENGL_DRIVER_PATH=${driversEnv}
           ln -sfn $OPENGL_DRIVER_PATH /run/opengl-driver
-          TIBS_ASSETS_FOLDER="${config.tibs.assetsDir}" LD_LIBRARY_PATH="${lib.getLib pkgs.libGL}/lib" ${tibs}/bin/tibs
-        '';
+          TIBS_ASSETS_FOLDER="${config.tibs.assetsDir}" LD_LIBRARY_PATH="${lib.getLib pkgs.libGL}/lib" ${config.tibs.tibsPath}
+        ''; 
       };
     };
     boot.consoleLogLevel = 0;
