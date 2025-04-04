@@ -43,24 +43,37 @@ impl Card {
     }
 
     pub fn open_global() -> Self {
-        let mut devices = egl::device::Device::query_devices().expect("Failed to query devices");
+        let query = || {
+            egl::device::Device::query_devices()
+                .expect("Failed to query devices")
+                .filter_map(|egl_device| {
+                    egl_device
+                        .drm_device_node_path()
+                        .and_then(|p| p.as_os_str().to_str())
+                })
+                .chain(["/dev/dri/card0", "/dev/dri/card1"])
+        };
+        let mut devices = query();
         let started_time = std::time::Instant::now();
         loop {
-            let Some(egl_device) = devices.next() else {
+            let Some(drm) = devices.next() else {
                 if started_time.elapsed().as_secs() < 5 {
                     println!("Failed to find device, trying again in 50ms");
-                    devices =
-                        egl::device::Device::query_devices().expect("Failed to query devices");
-
+                    devices = query();
                     std::thread::sleep(Duration::from_millis(50));
                     continue;
                 }
                 panic!("No device found (waited for 5s)");
             };
-            let Some(drm) = egl_device.drm_device_node_path() else {
-                continue;
-            };
-            break Self::open(drm.as_os_str().to_str().unwrap()).unwrap();
+            match Self::open(drm) {
+                Ok(card) => {
+                    println!("Using device: {}", drm);
+                    return card;
+                }
+                Err(e) => {
+                    println!("Failed to open device {}: {}", drm, e);
+                }
+            }
         }
     }
 
@@ -173,21 +186,10 @@ impl GlesContext for DrmGlesContext {
         let symbol = CString::new(fn_name).unwrap();
         self.display.get_proc_address(symbol.as_c_str())
     }
-    fn swap_buffers(&self) {
-        unsafe {
-            self.surface.swap_buffers(&self.context).unwrap();
-            let frontbuffer = self.gbm_surface.lock_front_buffer().unwrap();
-            let fb = self.gbm.add_framebuffer(&frontbuffer, 24, 32).unwrap();
-            self.gbm
-                .set_crtc(
-                    self.crtc.handle(),
-                    Some(fb),
-                    (0, 0),
-                    &[self.connector.handle()],
-                    Some(self.mode),
-                )
-                .unwrap();
-        }
+    fn swap_buffers(&self) -> bool {
+        self._swap_buffers()
+            .map_err(|e| println!("Failed to swap buffers: {}", e))
+            .is_ok()
     }
 
     fn size(&self) -> (u32, u32) {
@@ -198,5 +200,22 @@ impl DrmGlesContext {
     pub fn new_from_default_card() -> Self {
         let card = Card::open_global();
         card.initialize_egl()
+    }
+
+    fn _swap_buffers(&self) -> color_eyre::Result<()> {
+        unsafe {
+            self.surface.swap_buffers(&self.context)?;
+            let frontbuffer = self.gbm_surface.lock_front_buffer()?;
+            let fb = self.gbm.add_framebuffer(&frontbuffer, 24, 32)?;
+            self.gbm
+                .set_crtc(
+                    self.crtc.handle(),
+                    Some(fb),
+                    (0, 0),
+                    &[self.connector.handle()],
+                    Some(self.mode),
+                )?;
+        }
+        Ok(())
     }
 }

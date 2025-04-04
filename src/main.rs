@@ -56,7 +56,13 @@ fn main() -> color_eyre::Result<()> {
         );
         drop(c);
         skia_context.flush(None);
-        context.swap_buffers();
+
+        // If failed to swap buffers, probably the context died so we recover from the error
+        // By setting everything up again from scratch
+        if !context.swap_buffers() {
+            context = select_and_init_gles_context();
+            (skia_context, skia_surface) = init_skia(context.as_mut())?;
+        }
 
         if let Some(fps) = fps_counter.tick() {
             println!("FPS: {:.2}", fps);

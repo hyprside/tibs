@@ -5,7 +5,7 @@ pub mod drm;
 pub mod glfw;
 
 pub trait GlesContext {
-    fn swap_buffers(&self);
+    fn swap_buffers(&self) -> bool;
     fn size(&self) -> (u32, u32);
     fn should_close(&self) -> bool {
         false

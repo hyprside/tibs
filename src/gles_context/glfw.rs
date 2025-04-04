@@ -54,13 +54,14 @@ impl GlesContext for GlfwGlesContext {
     fn get_proc_address(&mut self, fn_name: &str) -> *const c_void {
         self.window.borrow_mut().get_proc_address(fn_name)
     }
-    fn swap_buffers(&self) {
+    fn swap_buffers(&self) -> bool {
         self.glfw.borrow_mut().poll_events();
         let mut window = self.window.borrow_mut();
         window.swap_buffers();
         if window.get_key(Key::Escape) == Action::Press {
             window.set_should_close(true);
         }
+        true
     }
 
     fn size(&self) -> (u32, u32) {
