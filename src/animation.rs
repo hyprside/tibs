@@ -522,6 +522,13 @@ pub mod easing {
         let c3 = c1 + 1.0;
         1.0 + c3 * (t - 1.0).powi(3) + c1 * (t - 1.0).powi(2)
     }
+    pub fn ease_in_out_circ(t: f32) -> f32 {
+        if t < 0.5 {
+            (1.0 - (1.0 - (2.0 * t).powi(2)).sqrt()) / 2.0
+        } else {
+            ((1.0 - (-2.0 * t + 2.0).powi(2)).sqrt() + 1.0) / 2.0
+        }
+    }
 }
 
 pub mod colors {

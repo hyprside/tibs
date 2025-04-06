@@ -29,13 +29,9 @@ pub trait Input {
     fn is_key_up(&self, key_code: xkbcommon::xkb::Keysym) -> bool;
 
 
-    /// Returns `true` if the specified mouse button is currently pressed.
     fn is_mouse_button_pressed(&self, button: MouseButton) -> bool;
-
-    /// Returns `true` if the specified mouse button was just pressed.
+    fn is_mouse_button_released(&self, button: MouseButton) -> bool;
     fn is_mouse_button_down(&self, button: MouseButton) -> bool;
-
-    /// Returns `true` if the specified mouse button was just released.
     fn is_mouse_button_up(&self, button: MouseButton) -> bool;
 
     /// Returns the current mouse position as (x, y) coordinates.

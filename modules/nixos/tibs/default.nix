@@ -29,6 +29,16 @@ in {
       default = "${tibs}/bin/tibs";
       description = "Path to the tibs binary";
     };
+    cursorThemesPath = mkOption {
+      type = types.path;
+      default = "${pkgs.catppuccin-cursors.frappeMauve}/share";
+      description = "Path to the cursors";
+    };
+    cursorName = mkOption {
+      type = types.string;
+      default = "catppuccin-frappe-mauve-cursors";
+      description = "Name of the cursor to use";
+    };
   };
 
   config = mkIf config.tibs.enable {
@@ -56,7 +66,7 @@ in {
           }
           export OPENGL_DRIVER_PATH=${driversEnv}
           ln -sfn $OPENGL_DRIVER_PATH /run/opengl-driver
-          TIBS_ASSETS_FOLDER="${config.tibs.assetsDir}" LD_LIBRARY_PATH="${lib.getLib pkgs.libGL}/lib" ${config.tibs.tibsPath}
+          HYPRCURSOR_THEME="${config.tibs.cursorName}" XDG_DATA_DIRS="${config.tibs.cursorThemesPath}" TIBS_ASSETS_FOLDER="${config.tibs.assetsDir}" LD_LIBRARY_PATH="${lib.getLib pkgs.libGL}/lib" ${config.tibs.tibsPath}
           exit_code=$?
 
           if [ $exit_code -eq 139 ]; then

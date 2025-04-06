@@ -4,6 +4,7 @@ use assets_manager::AssetCache;
 use clay_layout::{
     elements::{FloatingAttachPointType, FloatingAttachToElement},
     fixed, grow,
+    id::Id,
     layout::{
         Alignment, LayoutAlignmentX as LX, LayoutAlignmentY as LY, LayoutDirection, Padding, Sizing,
     },
@@ -175,6 +176,7 @@ impl LoadingScreen {
                 .child_gap((10. * end_progress_animation) as u16)
                 .end(),
             |c| {
+                let check_logs_button_id = c.id("check_logs_button_id");
                 c.with(
                     Declaration::new()
                         .layout()
@@ -188,7 +190,19 @@ impl LoadingScreen {
                         .corner_radius()
                         .all(8.0 * end_progress_animation)
                         .end()
-                        .background_color((0x0C, 0x70, 0x94).into()),
+                        .background_color(
+                            interpolate_color(
+                                (0x0C, 0x70, 0x94),
+                                (0, 0, 0),
+                                if c.pointer_over(check_logs_button_id) {
+                                    0.1
+                                } else {
+                                    0.
+                                },
+                            )
+                            .into(),
+                        )
+                        .id(check_logs_button_id),
                     |c| {
                         c.text(
                             "Check Logs",
@@ -200,6 +214,7 @@ impl LoadingScreen {
                         );
                     },
                 );
+                let continue_anyway_button_id = c.id("loading_continue_anyway_button");
                 c.with(
                     Declaration::new()
                         .layout()
@@ -217,7 +232,19 @@ impl LoadingScreen {
                         .all_directions(1)
                         .color((0x22, 0x30, 0x50).into())
                         .end()
-                        .background_color((0x21, 0x23, 0x42).into()),
+                        .id(continue_anyway_button_id)
+                        .background_color(
+                            interpolate_color(
+                                (0x21, 0x23, 0x42),
+                                (0, 0, 0),
+                                if c.pointer_over(continue_anyway_button_id) {
+                                    0.1
+                                } else {
+                                    0.
+                                },
+                            )
+                            .into(),
+                        ),
                     |c| {
                         c.text(
                             "Continue anyway",
@@ -226,7 +253,6 @@ impl LoadingScreen {
                                 .font_size((14. * end_progress_animation) as u16)
                                 .alignment(clay_layout::text::TextAlignment::Center)
                                 .end(),
-
                         );
                     },
                 );
@@ -327,7 +353,7 @@ impl LoadingScreen {
             },
         );
     }
-    fn get_animation_progress(&self, id: &str) -> f32 {
+    pub fn get_animation_progress(&self, id: &str) -> f32 {
         self.animations_state.get(id).copied().unwrap_or(0.0)
     }
 }

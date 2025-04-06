@@ -21,6 +21,8 @@ in
       glibc
       libinput
       libxkbcommon
+      cairo
+      hyprcursor
     ];
     nativeBuildInputs = with pkgs; [
       cmake

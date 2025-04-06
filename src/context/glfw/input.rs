@@ -151,13 +151,6 @@ impl Input for GlfwContext {
         !self.is_key_down(key_code)
     }
 
-    fn is_mouse_button_pressed(&self, button: crate::input::MouseButton) -> bool {
-        if let Some(glfw_button) = mouse_button_to_glfw(button) {
-            self.window.borrow().get_mouse_button(glfw_button) == Action::Press
-        } else {
-            false
-        }
-    }
 
     fn is_mouse_button_down(&self, button: crate::input::MouseButton) -> bool {
         if let Some(glfw_button) = mouse_button_to_glfw(button) {
@@ -195,7 +188,7 @@ impl Input for GlfwContext {
         // Reset per-frame mouse wheel delta and key state changes.
         self.mouse_wheel_delta = (0.0, 0.0);
         self.keyboard_state.new_frame();
-
+        self.mouse_state_changes.clear();
         // Poll GLFW for events and process them.
         self.glfw.borrow_mut().poll_events();
 
@@ -218,6 +211,21 @@ impl Input for GlfwContext {
                     self.mouse_wheel_delta.0 += xoffset;
                     self.mouse_wheel_delta.1 += yoffset;
                 }
+                glfw::WindowEvent::MouseButton(button, action, _) => {
+                    self.mouse_state_changes.insert(
+                        button,
+                        action == Action::Press,
+                    );
+                    match action {
+                        Action::Press => {
+                            self.mouse_state_changes.insert(button, true);
+                        }
+                        Action::Release => {
+                            self.mouse_state_changes.insert(button, false);
+                        }
+                        _ => {}
+                    }
+                }
                 _ => {}
             }
         }
@@ -228,5 +236,24 @@ impl Input for GlfwContext {
     
     fn is_key_released(&self, key_code: xkbcommon::xkb::Keysym) -> bool {
         self.keyboard_state.was_key_released(key_code)
+    }
+    fn is_mouse_button_released(&self, button: MouseButton) -> bool {
+        let Some(button) = mouse_button_to_glfw(button) else {
+            return false;
+        };
+        self.mouse_state_changes
+            .get(&button)
+            .copied()
+            .unwrap_or(true)
+    }
+
+    fn is_mouse_button_pressed(&self, button: crate::input::MouseButton) -> bool {
+        let Some(button) = mouse_button_to_glfw(button) else {
+            return false;
+        };
+        self.mouse_state_changes
+            .get(&button)
+            .copied()
+            .unwrap_or(false)
     }
 }

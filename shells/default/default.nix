@@ -28,6 +28,8 @@ mkShell rec {
     rust-analyzer
     libinput
     libxkbcommon
+    cairo
+    hyprcursor
   ];
   LD_LIBRARY_PATH = lib.makeLibraryPath packages;
 }

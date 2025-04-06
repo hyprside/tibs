@@ -1,7 +1,8 @@
 use crate::gl;
 use crate::input::KeyboardState;
-use glfw::{Context, Glfw, GlfwReceiver, PWindow, WindowEvent, WindowHint};
+use glfw::{Context, Glfw, GlfwReceiver, MouseButton, PWindow, WindowEvent, WindowHint};
 use std::cell::RefCell;
+use std::collections::HashMap;
 use std::ffi::c_void;
 use std::rc::Rc;
 use super::GlesContext;
@@ -11,7 +12,8 @@ pub struct GlfwContext {
     window: Rc<RefCell<PWindow>>,
     keyboard_state: KeyboardState,
     mouse_wheel_delta: (f64, f64),
-    events: GlfwReceiver<(f64, WindowEvent)>
+    events: GlfwReceiver<(f64, WindowEvent)>,
+    mouse_state_changes: HashMap<MouseButton, bool>,
 }
 
 impl GlfwContext {
@@ -28,12 +30,13 @@ impl GlfwContext {
         let (mut window, events) = glfw
             .with_primary_monitor(|glfw, m| {
                 glfw.create_window(
-                    1,
-                    1,
+                    1280,
+                    800,
                     title,
-                    m.map_or(glfw::WindowMode::Windowed, |m| {
-                        glfw::WindowMode::FullScreen(m)
-                    }),
+                    glfw::WindowMode::Windowed
+                    // m.map_or(glfw::WindowMode::Windowed, |m| {
+                    //     glfw::WindowMode::FullScreen(m)
+                    // }),
                 )
             })
             .expect("Failed to create GLFW window.");
@@ -47,6 +50,7 @@ impl GlfwContext {
             events,
             keyboard_state: KeyboardState::new(),
             mouse_wheel_delta: (0.0, 0.0),
+            mouse_state_changes: HashMap::new(),
         };
         gl::load_with(|symbol| context.get_proc_address(symbol));
         context

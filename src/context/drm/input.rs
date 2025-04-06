@@ -127,6 +127,10 @@ impl Input for DrmContext {
             }
         }
     }
+    
+    fn is_mouse_button_released(&self, button: crate::input::MouseButton) -> bool {
+        self.mouse_state.buttons_state_changes.get(&button).unwrap_or(&false) == &false
+    }
 }
 
 #[derive(Default)]
@@ -170,7 +174,6 @@ impl MouseState {
                     (self.mouse_position.1 as i32 + motion_event.dy() as i32).max(0).min(screen_size.1 as i32) as u32;
             }
             PointerEvent::Button(button_event) => {
-                dbg!(button_event.button());
                 // Update button state
                 let button = match button_event.button() {
                     272 => crate::input::MouseButton::Left,
