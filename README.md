@@ -1,6 +1,6 @@
 # Tiago's Incredible Boot Screen (TIBS)
 
-**Tiago's Incredible Boot Screen (TIBS)** is a boot animation program and display manager written in Rust. Designed to replace tools like Plymouth, SDDM, and GDM, TIBS delivers a smooth, modern boot experience by rendering animations with OpenGL.
+**Tiago's Incredible Boot Screen (TIBS)** is a (🚧 Work In Progress) boot animation program and display manager written in Rust. Designed to replace tools like Plymouth, SDDM, and GDM, TIBS delivers a smooth, modern boot experience by rendering animations with OpenGL.
 
 ---
 
@@ -20,9 +20,6 @@
 
 - **Scalable Cursor Rendering:**  
   Supports modern, vector-based cursor themes via the Hyprcursors library. Hyprcursors renders the cursor to a bitmap on demand, ensuring crisp visuals without the need for multiple bitmap sizes.
-
----
-
 
 ---
 
@@ -99,8 +96,7 @@ This configuration launches TIBS as a systemd service immediately after the init
   Modify the assets within the designated assets directory to adjust animations, progress bars, logos, and other UI elements.
 
 - **Cursor Rendering:**  
-  TIBS leverages the Hyprcursors library to load scalable, vector-based cursor themes. The library converts vector data to a bitmap at the desired size, which is then loaded into OpenGL for rendering.
-
+  TIBS leverages the Hyprcursors format for scalable, vector-based cursor themes.
 ---
 
 ## License
