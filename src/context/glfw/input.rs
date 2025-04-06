@@ -256,4 +256,9 @@ impl Input for GlfwContext {
             .copied()
             .unwrap_or(false)
     }
+
+    fn has_focus(&self) -> bool {
+        true
+    }
+    
 }

@@ -1,0 +1,5 @@
+#!/usr/bin/env bash
+
+xhost +SI:localuser:root
+
+doas bash -c "LD_LIBRARY_PATH=$LD_LIBRARY_PATH DISPLAY=$DISPLAY target/debug/tibs"

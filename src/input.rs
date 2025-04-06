@@ -28,7 +28,6 @@ pub trait Input {
     /// Returns `true` if the given key is currently not pressed.
     fn is_key_up(&self, key_code: xkbcommon::xkb::Keysym) -> bool;
 
-
     fn is_mouse_button_pressed(&self, button: MouseButton) -> bool;
     fn is_mouse_button_released(&self, button: MouseButton) -> bool;
     fn is_mouse_button_down(&self, button: MouseButton) -> bool;
@@ -37,19 +36,22 @@ pub trait Input {
     /// Returns the current mouse position as (x, y) coordinates.
     fn mouse_position(&self) -> (f32, f32);
 
-    // Gets how much the mouse wheel was scrolled in this frame
+    /// Gets how much the mouse wheel was scrolled in this frame.
     fn mouse_wheel(&self) -> (f32, f32);
 
     fn get_pressed_keys(&self) -> HashSet<xkbcommon::xkb::Keysym>;
     fn get_released_keys(&self) -> HashSet<xkbcommon::xkb::Keysym>;
 
-    // Polls all mouse and keyboard events and updates the internal state
+    /// Polls all mouse and keyboard events and updates the internal state.
     fn poll_events(&mut self);
 
-    // Whether the user pressed the X button on the window
+    /// Whether the user pressed the X button on the window.
     fn should_close(&self) -> bool {
         false
     }
+
+    /// Returns whether the input context currently has focus.
+    fn has_focus(&self) -> bool;
 }
 
 

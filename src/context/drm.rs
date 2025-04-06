@@ -4,6 +4,7 @@ use input::{InputInterface, MouseState};
 use crate::input::KeyboardState;
 use ::input::Libinput;
 use std::ffi::CString;
+use std::os::fd::AsRawFd;
 use std::ptr::NonNull;
 use std::time::Duration;
 use drm::control::{connector, crtc, Mode};
@@ -14,6 +15,79 @@ use glutin::context::ContextAttributesBuilder;
 use glutin::prelude::*;
 use glutin::surface::{SurfaceAttributesBuilder, WindowSurface};
 use raw_window_handle::{GbmDisplayHandle, GbmWindowHandle, RawDisplayHandle, RawWindowHandle};
+use std::sync::atomic::{AtomicBool, Ordering};
+use std::sync::LazyLock;
+use std::fs::OpenOptions;
+use libc::{c_char, c_short, c_int, ioctl, SIGUSR1, SIGUSR2};
+
+static TTY_FOCUS: AtomicBool = AtomicBool::new(true);
+static TTY: LazyLock<std::fs::File> = LazyLock::new(|| {
+    OpenOptions::new()
+        .read(true)
+        .write(true)
+        .open("/dev/tty")
+        .expect("Failed to open /dev/tty")
+});
+
+#[repr(C)]
+struct vt_mode {
+    mode: c_char,    // Operation mode
+    waitv: c_char,   // Unused
+    relsig: c_short, // Signal when releasing VT
+    acqsig: c_short, // Signal when acquiring VT
+    frsig: c_short,  // Unused
+}
+
+const VT_PROCESS: c_char = 0x01;
+const VT_SETMODE: u64 = 0x5602; // from <linux/vt.h>
+const VT_RELDISP: u64 = 0x5605; // from <linux/vt.h>
+
+unsafe extern "C" fn handle_release(_sig: i32) {
+    TTY_FOCUS.store(false, Ordering::Relaxed);
+    libc::ioctl(TTY.as_raw_fd(), VT_RELDISP, 1);
+    set_tty_text_mode(TTY.as_raw_fd()).map_err(|e| println!("Failed to set text mode: {e}")).ok();
+}
+
+unsafe extern "C" fn handle_acquire(_sig: i32) {
+    TTY_FOCUS.store(true, Ordering::Relaxed);
+    set_tty_graphics_mode(TTY.as_raw_fd()).map_err(|e| println!("Failed to set graphics mode: {e}")).ok();
+}
+const KDSETMODE: u64 = 0x4B3A; // from <linux/kd.h>
+const KD_TEXT: c_int = 0;
+const KD_GRAPHICS: c_int = 1;
+
+fn set_tty_graphics_mode(fd: i32) -> std::io::Result<()> {
+    let ret = unsafe { libc::ioctl(fd, KDSETMODE, KD_GRAPHICS) };
+    if ret < 0 {
+        Err(std::io::Error::last_os_error())
+    } else {
+        Ok(())
+    }
+}
+fn set_tty_text_mode(fd: i32) -> std::io::Result<()> {
+    let ret = unsafe { libc::ioctl(fd, KDSETMODE, KD_TEXT) };
+    if ret < 0 {
+        Err(std::io::Error::last_os_error())
+    } else {
+        Ok(())
+    }
+}
+fn set_vt_mode(fd: i32) -> std::io::Result<()> {
+    let mut vt = vt_mode {
+        mode: VT_PROCESS,
+        waitv: 0,
+        relsig: SIGUSR1 as i16,
+        acqsig: SIGUSR2 as i16,
+        frsig: 0,
+    };
+
+    let ret = unsafe { ioctl(fd, VT_SETMODE, &mut vt) };
+    if ret < 0 {
+        Err(std::io::Error::last_os_error())
+    } else {
+        Ok(())
+    }
+}
 
 use crate::gl;
 
@@ -118,7 +192,8 @@ pub struct DrmContext {
     libinput: Libinput,
     xkb_state: xkbcommon::xkb::State,
     keyboard_state: KeyboardState,
-    mouse_state: MouseState
+    mouse_state: MouseState,
+    focused: bool,
 }
 
 fn find_egl_config(egl_display: &egl::display::Display) -> egl::config::Config {
@@ -139,6 +214,7 @@ impl GlesContext for DrmContext {
         let symbol = CString::new(fn_name).unwrap();
         self.display.get_proc_address(symbol.as_c_str())
     }
+
     fn swap_buffers(&self) -> bool {
         self._swap_buffers()
             .map_err(|e| println!("Failed to swap buffers: {}", e))
@@ -148,7 +224,10 @@ impl GlesContext for DrmContext {
     fn size(&self) -> (u32, u32) {
         (self.mode.size().0 as u32, self.mode.size().1 as u32)
     }
+
+    
 }
+
 impl DrmContext {
     pub fn new() -> Self {
         let card = Card::open_global();
@@ -203,6 +282,12 @@ impl DrmContext {
             xkbcommon::xkb::KEYMAP_COMPILE_NO_FLAGS,
         ).unwrap();
         let xkb_state = xkbcommon::xkb::State::new(&xkb_keymap);
+        let tty_fd = TTY.as_raw_fd();
+        set_vt_mode(tty_fd).expect("Failed to set VT mode");
+        unsafe {
+            libc::signal(SIGUSR1, handle_release as usize);
+            libc::signal(SIGUSR2, handle_acquire as usize);
+        }
         let mut context = DrmContext {
             display: egl_display,
             gbm,
@@ -216,11 +301,12 @@ impl DrmContext {
             xkb_state,
             mouse_state: MouseState::new_at_middle(disp_width as u32, disp_height as u32),
             keyboard_state: KeyboardState::new(),
+            focused: true
         };
         gl::load_with(|symbol| context.get_proc_address(symbol));
         context
     }
-
+    
     fn _swap_buffers(&self) -> color_eyre::Result<()> {
         unsafe {
             self.surface.swap_buffers(&self.context)?;
@@ -237,8 +323,6 @@ impl DrmContext {
         }
         Ok(())
     }
-    
 }
-
 
 mod input;

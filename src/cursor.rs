@@ -1,4 +1,4 @@
-use std::{collections::HashMap, ffi::CString, mem::transmute, slice};
+use std::{collections::HashMap, ffi::CString};
 
 use cairo::{Format, ImageSurface};
 use hyprcursor::{CursorStyleInfo, HyprCursorManager};
@@ -135,7 +135,6 @@ impl Cursor {
         let (mx, my) = input.mouse_position();
         let pos = Point::new(mx, my);
         if let Some(image) = self.get_or_load_cursor(cursor_name) {
-            println!("[DEBUG] Rendering loaded cursor image '{}'.", cursor_name);
             let dest_rect =
                 Rect::from_xywh(pos.x, pos.y, image.width() as f32, image.height() as f32);
             skia_canvas.draw_image_rect_with_sampling_options(

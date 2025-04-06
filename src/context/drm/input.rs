@@ -1,7 +1,7 @@
 use std::{
     collections::{HashMap, HashSet},
     fs::{File, OpenOptions},
-    os::{fd::OwnedFd, unix::fs::OpenOptionsExt},
+    os::{fd::{AsRawFd, OwnedFd}, unix::fs::OpenOptionsExt},
     path::Path,
 };
 
@@ -97,6 +97,24 @@ impl Input for DrmContext {
         (x as f32, y as f32)
     }
     fn poll_events(&mut self) {
+        let new_focus = super::TTY_FOCUS.load(std::sync::atomic::Ordering::Relaxed);
+        if self.focused != new_focus {
+            if new_focus {
+                if unsafe {
+                    libc::ioctl(self.gbm.0.as_raw_fd(), 0x2000641e, 0)
+                } != 0 {
+                    println!("Failed to resume rendering")
+                }
+            } else {
+                if unsafe {
+                    libc::ioctl(self.gbm.0.as_raw_fd(), 0x2000641f, 0)
+                } != 0 {
+                    println!("Failed to pause rendering")
+                }
+            }
+        }
+        self.focused = new_focus;
+
         // Reset the keyboard and mouse state
         self.mouse_state.new_frame();
         self.keyboard_state.new_frame();
@@ -130,6 +148,10 @@ impl Input for DrmContext {
     
     fn is_mouse_button_released(&self, button: crate::input::MouseButton) -> bool {
         self.mouse_state.buttons_state_changes.get(&button).unwrap_or(&false) == &false
+    }
+
+    fn has_focus(&self) -> bool {
+        self.focused
     }
 }
 

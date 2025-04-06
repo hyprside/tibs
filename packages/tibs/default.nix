@@ -32,4 +32,5 @@ in
       curl
     ];
     SKIA_BINARIES_URL = "file://${skia-binaries}";
+    cargoExtraArgs = "--no-default-features";
   }
