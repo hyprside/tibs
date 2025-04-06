@@ -66,7 +66,7 @@ in {
           }
           export OPENGL_DRIVER_PATH=${driversEnv}
           ln -sfn $OPENGL_DRIVER_PATH /run/opengl-driver
-          HYPRCURSOR_THEME="${config.tibs.cursorName}" XDG_DATA_DIRS="${config.tibs.cursorThemesPath}" TIBS_ASSETS_FOLDER="${config.tibs.assetsDir}" LD_LIBRARY_PATH="${lib.getLib pkgs.libGL}/lib" ${config.tibs.tibsPath}
+          HOME="/root" HYPRCURSOR_THEME="${config.tibs.cursorName}" XDG_DATA_DIRS="${config.tibs.cursorThemesPath}" TIBS_ASSETS_FOLDER="${config.tibs.assetsDir}" LD_LIBRARY_PATH="${lib.getLib pkgs.libGL}/lib" ${config.tibs.tibsPath}
           exit_code=$?
 
           if [ $exit_code -eq 139 ]; then
