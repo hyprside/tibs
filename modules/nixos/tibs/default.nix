@@ -58,6 +58,9 @@ in {
       after = requires;
       serviceConfig = {
         Type = "simple";
+        TTYPath="/dev/tty1";
+        StandardInput = "tty";
+        StandardOutput = "tty";
         ExecStart = pkgs.writeShellScript "tibs-service" ''
           log_dmesg() {
               echo "Tibs crashed:"
