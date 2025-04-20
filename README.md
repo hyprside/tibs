@@ -15,7 +15,7 @@ Current state of the UI:
   Provides a seamless and visually appealing boot screen right from the start of the boot process.
 
 - **Direct DRM Rendering:**  
-  Uses DRM for direct screen output, bypassing traditional window managers to reduce latency and jank.
+  Uses DRM for direct screen output, removing the need for a wayland compositor.
 
 - **OpenGL-Powered Graphics:**  
   Delivers high-quality, dynamic animations with hardware acceleration.
