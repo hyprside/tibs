@@ -2,6 +2,10 @@
 
 **Tiago's Incredible Boot Screen (TIBS)** is a (🚧 Work In Progress) boot animation program and display manager written in Rust. Designed to replace tools like Plymouth, SDDM, and GDM, TIBS delivers a smooth, modern boot experience by rendering animations with OpenGL.
 
+Current state of the UI:
+![image](https://github.com/user-attachments/assets/215369e8-b73f-4037-aab0-fb41269a3ae3)
+
+
 ---
 
 ## Features
