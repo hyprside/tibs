@@ -1,3 +1,4 @@
+use super::GlesContext;
 use crate::gl;
 use crate::input::KeyboardState;
 use glfw::{Context, Glfw, GlfwReceiver, MouseButton, PWindow, WindowEvent, WindowHint};
@@ -5,7 +6,6 @@ use std::cell::RefCell;
 use std::collections::HashMap;
 use std::ffi::c_void;
 use std::rc::Rc;
-use super::GlesContext;
 
 pub struct GlfwContext {
     glfw: RefCell<Glfw>,
@@ -15,6 +15,7 @@ pub struct GlfwContext {
     events: GlfwReceiver<(f64, WindowEvent)>,
     mouse_state_changes: HashMap<MouseButton, bool>,
     old_mouse_state: HashMap<MouseButton, bool>,
+    input_characters: Vec<char>,
 }
 
 impl GlfwContext {
@@ -30,17 +31,13 @@ impl GlfwContext {
         ));
         let (mut window, events) = glfw
             .with_primary_monitor(|glfw, m| {
-                glfw.create_window(
-                    1280,
-                    800,
-                    title,
-                    glfw::WindowMode::Windowed
-                )
+                glfw.create_window(1280, 800, title, glfw::WindowMode::Windowed)
             })
             .expect("Failed to create GLFW window.");
 
         window.make_current();
         window.set_key_polling(true);
+        window.set_char_polling(true);
         window.set_scroll_polling(true);
         window.set_cursor_mode(glfw::CursorMode::Hidden);
         let mut context = GlfwContext {
@@ -51,6 +48,7 @@ impl GlfwContext {
             mouse_wheel_delta: (0.0, 0.0),
             mouse_state_changes: HashMap::new(),
             old_mouse_state: HashMap::new(),
+            input_characters: vec![],
         };
         gl::load_with(|symbol| context.get_proc_address(symbol));
         context
@@ -75,7 +73,7 @@ impl GlesContext for GlfwContext {
     fn get_proc_address(&mut self, fn_name: &str) -> *const c_void {
         self.window.borrow_mut().get_proc_address(fn_name)
     }
-    fn swap_buffers(&self) -> bool {
+    fn swap_buffers(&mut self) -> bool {
         self.glfw.borrow_mut().poll_events();
         let mut window = self.window.borrow_mut();
         window.swap_buffers();

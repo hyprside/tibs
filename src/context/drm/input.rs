@@ -1,7 +1,10 @@
 use std::{
     collections::{HashMap, HashSet},
     fs::{File, OpenOptions},
-    os::{fd::{AsRawFd, OwnedFd}, unix::fs::OpenOptionsExt},
+    os::{
+        fd::{AsRawFd, OwnedFd},
+        unix::fs::OpenOptionsExt,
+    },
     path::Path,
 };
 
@@ -97,25 +100,31 @@ impl Input for DrmContext {
         if x != 0.0 || y != 0.0 {
             dbg!(x, y);
         }
-        if self.is_key_down(Keysym::Shift_L){
+        if self.is_key_down(Keysym::Shift_L) {
             (y as f32, x as f32)
         } else {
             (x as f32, y as f32)
         }
     }
+
+    fn get_input_characters(&self) -> Vec<char> {
+        self.get_pressed_keys()
+            .iter()
+            .filter(|c| !(c.is_modifier_key() || c.is_function_key()))
+            .filter_map(|c| c.key_char())
+            .filter(|c| !c.is_ascii_control())
+            .collect()
+    }
+
     fn poll_events(&mut self) {
         let new_focus = super::TTY_FOCUS.load(std::sync::atomic::Ordering::Relaxed);
         if self.focused != new_focus {
             if new_focus {
-                if unsafe {
-                    libc::ioctl(self.gbm.0.as_raw_fd(), 0x2000641e, 0)
-                } != 0 {
+                if unsafe { libc::ioctl(self.gbm_device.0.as_raw_fd(), 0x2000641e, 0) } != 0 {
                     println!("Failed to resume rendering")
                 }
             } else {
-                if unsafe {
-                    libc::ioctl(self.gbm.0.as_raw_fd(), 0x2000641f, 0)
-                } != 0 {
+                if unsafe { libc::ioctl(self.gbm_device.0.as_raw_fd(), 0x2000641f, 0) } != 0 {
                     println!("Failed to pause rendering")
                 }
             }
@@ -135,9 +144,15 @@ impl Input for DrmContext {
             match event {
                 input::Event::Keyboard(keyboard_event) => {
                     let keycode: Keycode = (keyboard_event.key() + 8).into();
-                    
-                    let keysyms = self.xkb_state.key_get_syms(keycode);
                     let keystate = keyboard_event.key_state();
+                    self.xkb_state.update_key(
+                        keycode,
+                        match keystate {
+                            input::event::keyboard::KeyState::Pressed => xkb::KeyDirection::Down,
+                            input::event::keyboard::KeyState::Released => xkb::KeyDirection::Up,
+                        },
+                    );
+                    let keysyms = self.xkb_state.key_get_syms(keycode);
                     for &keysym in keysyms {
                         keyboard_state.process_keyboard_event(keysym, keystate);
                     }
@@ -153,10 +168,11 @@ impl Input for DrmContext {
             }
         }
     }
-    
+
     fn is_mouse_button_released(&self, button: crate::input::MouseButton) -> bool {
         self.mouse_state
-            .buttons_state_changes.get(&button)
+            .buttons_state_changes
+            .get(&button)
             .map(|&state| !state)
             .unwrap_or(false)
     }
@@ -201,10 +217,12 @@ impl MouseState {
             PointerEvent::Motion(motion_event) => {
                 // Update mouse position and delta
                 self.mouse_position_delta = (motion_event.dx() as i32, motion_event.dy() as i32);
-                self.mouse_position.0 =
-                    (self.mouse_position.0 as i32 + motion_event.dx() as i32).max(0).min(screen_size.0 as i32) as u32;
-                self.mouse_position.1 =
-                    (self.mouse_position.1 as i32 + motion_event.dy() as i32).max(0).min(screen_size.1 as i32) as u32;
+                self.mouse_position.0 = (self.mouse_position.0 as i32 + motion_event.dx() as i32)
+                    .max(0)
+                    .min(screen_size.0 as i32) as u32;
+                self.mouse_position.1 = (self.mouse_position.1 as i32 + motion_event.dy() as i32)
+                    .max(0)
+                    .min(screen_size.1 as i32) as u32;
             }
             PointerEvent::Button(button_event) => {
                 // Update button state
@@ -212,7 +230,7 @@ impl MouseState {
                     272 => crate::input::MouseButton::Left,
                     273 => crate::input::MouseButton::Right,
                     274 => crate::input::MouseButton::Middle,
-                    b => crate::input::MouseButton::Other(b-271),
+                    b => crate::input::MouseButton::Other(b - 271),
                 };
                 self.buttons_state
                     .insert(button, button_event.button_state() == ButtonState::Pressed);
@@ -233,35 +251,34 @@ impl MouseState {
                 self.mouse_position = (new_position.0 as u32, new_position.1 as u32);
             }
             PointerEvent::ScrollWheel(pointer_scroll_wheel_event) => {
-                if pointer_scroll_wheel_event.has_axis(LibInputPointerAxis::Horizontal){
+                if pointer_scroll_wheel_event.has_axis(LibInputPointerAxis::Horizontal) {
                     self.mouse_wheel_delta.0 +=
-                    pointer_scroll_wheel_event.scroll_value(LibInputPointerAxis::Horizontal);
+                        pointer_scroll_wheel_event.scroll_value(LibInputPointerAxis::Horizontal);
                 }
-                
-                if pointer_scroll_wheel_event.has_axis(LibInputPointerAxis::Vertical){
+
+                if pointer_scroll_wheel_event.has_axis(LibInputPointerAxis::Vertical) {
                     self.mouse_wheel_delta.1 +=
                         pointer_scroll_wheel_event.scroll_value(LibInputPointerAxis::Vertical);
                 }
             }
             PointerEvent::ScrollFinger(pointer_scroll_finger_event) => {
-                
-                if pointer_scroll_finger_event.has_axis(LibInputPointerAxis::Horizontal){
+                if pointer_scroll_finger_event.has_axis(LibInputPointerAxis::Horizontal) {
                     self.mouse_wheel_delta.0 +=
-                    pointer_scroll_finger_event.scroll_value(LibInputPointerAxis::Horizontal);
+                        pointer_scroll_finger_event.scroll_value(LibInputPointerAxis::Horizontal);
                 }
-                
-                if pointer_scroll_finger_event.has_axis(LibInputPointerAxis::Vertical){
+
+                if pointer_scroll_finger_event.has_axis(LibInputPointerAxis::Vertical) {
                     self.mouse_wheel_delta.1 +=
                         pointer_scroll_finger_event.scroll_value(LibInputPointerAxis::Vertical);
                 }
             }
             PointerEvent::ScrollContinuous(pointer_scroll_continuous_event) => {
-                if pointer_scroll_continuous_event.has_axis(LibInputPointerAxis::Horizontal){
-                    self.mouse_wheel_delta.0 +=
-                    pointer_scroll_continuous_event.scroll_value(LibInputPointerAxis::Horizontal);
+                if pointer_scroll_continuous_event.has_axis(LibInputPointerAxis::Horizontal) {
+                    self.mouse_wheel_delta.0 += pointer_scroll_continuous_event
+                        .scroll_value(LibInputPointerAxis::Horizontal);
                 }
-                
-                if pointer_scroll_continuous_event.has_axis(LibInputPointerAxis::Vertical){
+
+                if pointer_scroll_continuous_event.has_axis(LibInputPointerAxis::Vertical) {
                     self.mouse_wheel_delta.1 +=
                         pointer_scroll_continuous_event.scroll_value(LibInputPointerAxis::Vertical);
                 }
@@ -270,5 +287,4 @@ impl MouseState {
             _ => {}
         }
     }
-
 }

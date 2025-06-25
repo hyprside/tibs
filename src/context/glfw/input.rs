@@ -183,17 +183,24 @@ impl Input for GlfwContext {
         self.keyboard_state.get_released_keys()
     }
 
+    fn get_input_characters(&self) -> Vec<char> {
+        self.input_characters.clone()
+    }
+
     fn poll_events(&mut self) {
         // Reset per-frame mouse wheel delta and key state changes.
         self.mouse_wheel_delta = (0.0, 0.0);
         self.keyboard_state.new_frame();
         self.mouse_state_changes.clear();
-
+        self.input_characters.clear();
         // Poll GLFW for events and process them.
         self.glfw.borrow_mut().poll_events();
 
         for (_, event) in glfw::flush_messages(&self.events) {
             match event {
+                glfw::WindowEvent::Char(c) => {
+                    self.input_characters.push(c);
+                }
                 glfw::WindowEvent::Key(key, _scancode, action, _mods) => {
                     if let Some(keysym) = glfw_key_to_keysym(key) {
                         match action {

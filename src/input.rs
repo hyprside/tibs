@@ -1,7 +1,10 @@
-use std::{collections::{HashMap, HashSet}, time::{Duration, Instant}};
+use std::{
+    collections::{HashMap, HashSet},
+    time::{Duration, Instant},
+};
 
-use xkbcommon::xkb;
 use input::event::keyboard::KeyState as LibInputKeyState;
+use xkbcommon::xkb;
 
 /// Supported mouse buttons.
 #[derive(PartialEq, Eq, Hash, Clone, Copy, Debug)]
@@ -18,10 +21,10 @@ pub enum MouseButton {
 pub trait Input {
     /// Returns `true` if the given key was just pressed (i.e., this frame).
     fn is_key_pressed(&self, key_code: xkbcommon::xkb::Keysym) -> bool;
-    
+
     /// Returns `true` if the given key was just released (i.e., this frame).
     fn is_key_released(&self, key_code: xkbcommon::xkb::Keysym) -> bool;
-    
+
     /// Returns `true` if the given key is currently pressed.
     fn is_key_down(&self, key_code: xkbcommon::xkb::Keysym) -> bool;
 
@@ -41,6 +44,8 @@ pub trait Input {
 
     fn get_pressed_keys(&self) -> HashSet<xkbcommon::xkb::Keysym>;
     fn get_released_keys(&self) -> HashSet<xkbcommon::xkb::Keysym>;
+
+    fn get_input_characters(&self) -> Vec<char>;
 
     /// Polls all mouse and keyboard events and updates the internal state.
     fn poll_events(&mut self);
@@ -124,12 +129,16 @@ impl KeyboardState {
     pub fn process_keyboard_event(&mut self, key: xkb::Keysym, key_state: LibInputKeyState) {
         match key_state {
             LibInputKeyState::Pressed => {
-                let already = self.keys.get(&key)
-                    .map_or(false, |info| matches!(info.state, KeyStatus::Pressed | KeyStatus::Down));
+                let already = self.keys.get(&key).map_or(false, |info| {
+                    matches!(info.state, KeyStatus::Pressed | KeyStatus::Down)
+                });
                 if !already {
                     self.keys.insert(
                         key,
-                        KeyInfo { state: KeyStatus::Pressed, next_repeat: None },
+                        KeyInfo {
+                            state: KeyStatus::Pressed,
+                            next_repeat: None,
+                        },
                     );
                 }
             }
@@ -145,19 +154,23 @@ impl KeyboardState {
 
     /// Retorna true se a tecla está pressionada ou mantida.
     pub fn is_key_down(&self, key: xkb::Keysym) -> bool {
-        self.keys.get(&key)
-            .map_or(false, |info| matches!(info.state, KeyStatus::Pressed | KeyStatus::Down))
+        self.keys.get(&key).map_or(false, |info| {
+            matches!(info.state, KeyStatus::Pressed | KeyStatus::Down)
+        })
     }
 
     /// Retorna true se a tecla foi pressionada neste frame.
     pub fn was_key_pressed(&self, key: xkb::Keysym) -> bool {
-        self.keys.get(&key)
-            .map_or(false, |info| info.state == KeyStatus::Pressed) || self.should_repeat_key(key)
+        self.keys
+            .get(&key)
+            .map_or(false, |info| info.state == KeyStatus::Pressed)
+            || self.should_repeat_key(key)
     }
 
     /// Retorna true se a tecla foi libertada neste frame.
     pub fn was_key_released(&self, key: xkb::Keysym) -> bool {
-        self.keys.get(&key)
+        self.keys
+            .get(&key)
             .map_or(false, |info| info.state == KeyStatus::Released)
     }
 
@@ -168,15 +181,29 @@ impl KeyboardState {
 
     /// Retorna todas as teclas que foram pressionadas neste frame.
     pub fn get_pressed_keys(&self) -> HashSet<xkb::Keysym> {
-        self.keys.iter()
-            .filter_map(|(&k, info)| if info.state == KeyStatus::Pressed || self.should_repeat_key(k) { Some(k) } else { None })
+        self.keys
+            .iter()
+            .filter_map(|(&k, info)| {
+                if info.state == KeyStatus::Pressed || self.should_repeat_key(k) {
+                    Some(k)
+                } else {
+                    None
+                }
+            })
             .collect()
     }
 
     /// Retorna todas as teclas que foram libertadas neste frame.
     pub fn get_released_keys(&self) -> HashSet<xkb::Keysym> {
-        self.keys.iter()
-            .filter_map(|(&k, info)| if info.state == KeyStatus::Released { Some(k) } else { None })
+        self.keys
+            .iter()
+            .filter_map(|(&k, info)| {
+                if info.state == KeyStatus::Released {
+                    Some(k)
+                } else {
+                    None
+                }
+            })
             .collect()
     }
 }

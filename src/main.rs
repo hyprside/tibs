@@ -76,6 +76,8 @@ fn main() -> color_eyre::Result<()> {
     let mut devtools = false;
     let mut background = Background::new(&assets);
     while !context.should_close() {
+        let current_time = std::time::Instant::now();
+
         context.poll_events();
 
         if !context.has_focus() {
@@ -86,7 +88,6 @@ fn main() -> color_eyre::Result<()> {
             clay.set_debug_mode(devtools);
         }
         let (screen_width, screen_height) = context.size();
-        let current_time = std::time::Instant::now();
         let delta = current_time.duration_since(last_time).as_secs_f32();
         last_time = current_time;
         let camera_y = screen_slide_animation_progress * screen_height as f32;
@@ -178,13 +179,20 @@ fn main() -> color_eyre::Result<()> {
         }
 
         skia_context.flush(None);
-
+        println!(
+            "Frame time: {}ms",
+            current_time.elapsed().as_secs_f64() * 1000.
+        );
+        let current_time = std::time::Instant::now();
         // Recover a dead context if needed.
         if !context.swap_buffers() {
             context = select_and_init_context();
             (skia_context, skia_surface) = init_skia(context.as_gles_context_mut())?;
         }
-
+        println!(
+            "Swap Buffers time: {}ms",
+            current_time.elapsed().as_secs_f64() * 1000.
+        );
         if skia_surface.width() != screen_width as _ || skia_surface.height() != screen_height as _
         {
             skia_surface = create_skia_surface(&mut skia_context, screen_width, screen_height)?;

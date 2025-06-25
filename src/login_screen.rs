@@ -143,9 +143,9 @@ impl LoginScreen {
 
         let is_hovered = c.pointer_over(id);
         if is_hovered {
-            decl.background_color((0x2E / 2, 0x3E / 2, 0x4E / 2, 0x10).into());
+            decl.background_color((0x2E / 2, 0x3E / 2, 0x4E / 2, 0x30).into());
         } else if is_selected {
-            decl.background_color((0x2E, 0x3E, 0x4E, 0x10).into());
+            decl.background_color((0x2E, 0x3E, 0x4E, 0x30).into());
         }
 
         c.with(&decl, |c| {
@@ -207,7 +207,7 @@ impl LoginScreen {
                                 .width(fixed!(128.0))
                                 .height(fixed!(128.0))
                                 .end()
-                                .background_color((0xAA, 0xAA, 0xAA, 0x10).into())
+                                .background_color((0xAA, 0xAA, 0xAA, 0x30).into())
                                 .corner_radius()
                                 .all(99999.0)
                                 .end();
@@ -273,7 +273,7 @@ impl LoginScreen {
                 .width(fixed!(50.0))
                 .height(fixed!(50.0))
                 .end()
-                .background_color((0x0E, 0x1A, 0x26, 0x10).into())
+                .background_color((0x0E, 0x1A, 0x26, 0x30).into())
                 .corner_radius()
                 .all(10.0)
                 .end(),
@@ -307,7 +307,7 @@ impl LoginScreen {
                 .width(fixed!(50.0))
                 .height(fixed!(50.0))
                 .end()
-                .background_color((0x0E, 0x1A, 0x26, 0x10).into())
+                .background_color((0x0E, 0x1A, 0x26, 0x30).into())
                 .corner_radius()
                 .all(10.0)
                 .end()

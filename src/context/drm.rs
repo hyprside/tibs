@@ -15,15 +15,16 @@ use glutin::display::{AsRawDisplay, RawDisplay};
 use glutin::prelude::*;
 use glutin::surface::{SurfaceAttributesBuilder, WindowSurface};
 use input::{InputInterface, MouseState};
-use libc::{c_char, c_int, c_short, ioctl, SIGUSR1, SIGUSR2};
+use libc::{c_char, c_int, c_short, ioctl, pollfd, SIGUSR1, SIGUSR2};
 use raw_window_handle::{GbmDisplayHandle, GbmWindowHandle, RawDisplayHandle, RawWindowHandle};
 use std::collections::HashMap;
 use std::ffi::{c_void, CString};
 use std::fs::OpenOptions;
-use std::os::fd::AsRawFd;
+use std::os::fd::{AsFd, AsRawFd};
 use std::ptr::NonNull;
 use std::sync::atomic::{AtomicBool, Ordering};
 use std::sync::LazyLock;
+use std::thread::sleep_ms;
 use std::time::Duration;
 use std::u64;
 
@@ -219,7 +220,7 @@ impl Card {
 }
 pub struct DrmContext {
     display: egl::display::Display,
-    gbm: gbm::Device<Card>,
+    gbm_device: gbm::Device<Card>,
     gbm_surface: gbm::Surface<()>,
     surface: egl::surface::Surface<WindowSurface>,
     context: egl::context::PossiblyCurrentContext,
@@ -233,6 +234,7 @@ pub struct DrmContext {
     focused: bool,
     plane: plane::Handle,
     plane_properties: HashMap<String, property::Info>,
+    first_frame: bool,
 }
 
 fn find_egl_config(egl_display: &egl::display::Display) -> egl::config::Config {
@@ -254,7 +256,7 @@ impl GlesContext for DrmContext {
         self.display.get_proc_address(symbol.as_c_str())
     }
 
-    fn swap_buffers(&self) -> bool {
+    fn swap_buffers(&mut self) -> bool {
         self._swap_buffers()
             .map_err(|e| println!("Failed to swap buffers: {}", e))
             .is_ok()
@@ -319,7 +321,7 @@ impl DrmContext {
             &xkb_context,
             "evdev",
             "evdev",
-            "pt",
+            "",
             "",
             None,
             xkbcommon::xkb::KEYMAP_COMPILE_NO_FLAGS,
@@ -350,37 +352,34 @@ impl DrmContext {
                 .get_properties(plane)
                 .and_then(|p| p.as_hashmap(&gbm))
                 .unwrap_or_default(),
-            gbm,
+            gbm_device: gbm,
+            first_frame: true,
         };
         gl::load_with(|symbol| context.get_proc_address(symbol));
         context
     }
 
-    fn _swap_buffers(&self) -> color_eyre::Result<()> {
+    fn _swap_buffers(&mut self) -> color_eyre::Result<()> {
         unsafe {
-            gl::Flush();
-            let egl = self.display.egl();
-            let display = egl.GetCurrentDisplay();
-            egl.SwapInterval(display, 1);
-            let egl_fence = egl.CreateSyncKHR(
-                display,
-                0x30F9, // SYNC_FENCE_KHR
-                std::ptr::null(),
-            );
-            egl.ClientWaitSyncKHR(display, egl_fence, 0, u64::MAX);
-            egl.DestroySyncKHR(display, egl_fence);
             self.surface.swap_buffers(&self.context)?;
-
             let frontbuffer = self.gbm_surface.lock_front_buffer()?;
-            let fb = self.gbm.add_framebuffer(&frontbuffer, 24, 32)?;
+            // if !self.first_frame {
+            //     self.gbm_device.wait_vblank(
+            //         drm::VblankWaitTarget::Relative(1),
+            //         VblankWaitFlags::empty(),
+            //         u32::from(self.crtc.handle()) >> 27,
+            //         0,
+            //     )?;
+            // }
+            let fb = self.gbm_device.add_framebuffer(&frontbuffer, 24, 32)?;
             let con_props = self
-                .gbm
+                .gbm_device
                 .get_properties(self.connector.handle())?
-                .as_hashmap(&self.gbm)?;
+                .as_hashmap(&self.gbm_device)?;
             let crtc_props = self
-                .gbm
+                .gbm_device
                 .get_properties(self.crtc.handle())?
-                .as_hashmap(&self.gbm)?;
+                .as_hashmap(&self.gbm_device)?;
             let plane = self.plane;
             let mut atomic_req = AtomicModeReq::new();
 
@@ -391,7 +390,7 @@ impl DrmContext {
             );
 
             let blob = self
-                .gbm
+                .gbm_device
                 .create_property_blob(&self.mode)
                 .expect("Failed to create blob");
             atomic_req.add_property(self.crtc.handle(), crtc_props["MODE_ID"].handle(), blob);
@@ -451,12 +450,32 @@ impl DrmContext {
                 self.plane_properties["CRTC_H"].handle(),
                 property::Value::UnsignedRange(self.mode.size().1 as u64),
             );
-
-            self.gbm
-                .atomic_commit(AtomicCommitFlags::ALLOW_MODESET, atomic_req)
+            // Use atomic commit with PAGE_FLIP_EVENT
+            self.gbm_device
+                .atomic_commit(
+                    AtomicCommitFlags::PAGE_FLIP_EVENT,
+                    atomic_req,
+                )
                 .expect("Failed to commit atomic request");
+
+            // // Now wait for the event from drm fd
+            // let drm_fd = self.gbm_device.as_fd().as_raw_fd();
+            // let mut fds = [pollfd {
+            //   fd: drm_fd, events: libc::POLLIN,
+            //   revents: 0
+            // }];
+            // libc::poll(fds.as_mut_ptr(), fds.len() as u64, -1); // Block until event
+
             // FIXME: Try to fix the stupid tearing, i'm already wanting to kill myself because I already spent
             // +4 hours trying to solve tearing I can't do this anymore
+            'l: loop {
+              for event in self.gbm_device.receive_events()? {
+                  if let control::Event::PageFlip(_) = event {
+                      break 'l; // Page flip event received
+                  }
+              }
+            }
+            self.first_frame = false;
             Ok(())
         }
     }

@@ -157,7 +157,7 @@ async fn fake_progress_bar(
     shutdown_clone: &Arc<AtomicBool>,
     progress_data: &mut ProgressData,
 ) {
-    let service_names = (0..100)
+    let service_names = (0..20)
         .map(|i| format!("fake{i}.service"))
         .collect::<Vec<String>>();
 
