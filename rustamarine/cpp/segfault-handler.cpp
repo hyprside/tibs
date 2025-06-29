@@ -59,7 +59,7 @@ void segfault_handler(int sig, siginfo_t *si, void *context) {
 
     if (unw_init_local2(&cursor, uc, UNW_INIT_SIGNAL_FRAME) < 0) {
         fprintf(stderr, "unw_init_local2 failed\n");
-        _exit(1);
+        _exit(11);
     }
 
     fprintf(stderr, "Segfault! Address: %p\nBacktrace:\n", si->si_addr);
@@ -85,7 +85,7 @@ void segfault_handler(int sig, siginfo_t *si, void *context) {
         }
     }
 
-    _exit(1);
+    _exit(11);
 }
 
 void setup_segfault_handler() {
