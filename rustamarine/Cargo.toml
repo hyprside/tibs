@@ -7,12 +7,9 @@ edition = "2021"
 bindgen = "0.72.0"
 cmake = "*"
 pkg-config = "*"
-
-[dev-dependencies]
-rand = { version = "0.8" }
-
-[dependencies]
 gl_generator = { version="0", optional = true }
+[dev-dependencies]
+rand = "0.9"
 
 [features]
 opengl_loader = ["dep:gl_generator"]
