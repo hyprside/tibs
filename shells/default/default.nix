@@ -2,20 +2,16 @@
   pkgs,
   mkShell,
   lib,
+  inputs,
+  system,
   ...
 }:
 mkShell rec {
   packages = with pkgs; [
     mesa
-    libGL
+    libGL.dev
     cmake
-    glfw
     pkg-config
-    xorg.libX11
-    xorg.libXrandr
-    xorg.libXinerama
-    xorg.libXcursor
-    xorg.libXi
     python3
     ninja
     fontconfig
@@ -30,6 +26,13 @@ mkShell rec {
     libxkbcommon
     cairo
     hyprcursor
+    hyprutils.dev
+    aquamarine.dev
+    libdrm.dev
+    libgbm
+    libunwind.dev
+    libbacktrace
   ];
   LD_LIBRARY_PATH = lib.makeLibraryPath packages;
+  LIBCLANG_PATH = "${pkgs.llvmPackages_16.libclang.lib}/lib";
 }

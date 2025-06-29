@@ -5,7 +5,7 @@ use clay_layout::{
     Declaration,
 };
 
-use crate::{input::Input, skia_clay::create_measure_text_function, TibsClayScope, FONTS};
+use crate::{skia_clay::create_measure_text_function, TibsClayScope, FONTS};
 
 pub struct Textbox {
     buffer: String,

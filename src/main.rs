@@ -14,10 +14,8 @@ pub mod gl_errors;
 pub mod login_screen;
 #[macro_use]
 pub mod animation;
-pub mod context;
 pub mod cursor;
 pub mod gles_context;
-pub mod input;
 pub mod loading_screen;
 pub mod progress_watcher;
 pub mod skia;
@@ -36,7 +34,6 @@ use crate::{
     skia_clay::{clay_skia_render, create_measure_text_function},
 };
 use assets_manager::AssetCache;
-use context::select_and_init_context;
 use skia::{create_skia_surface, init_skia};
 use skia_safe::{FontMgr, FontStyle, Typeface};
 use std::{mem::ManuallyDrop, sync::LazyLock};
