@@ -6,6 +6,8 @@
 #include <print>
 #include <rustamarine/internal/rustamarine.hpp>
 #include <string>
+#include <xkbcommon/xkbcommon-compose.h>
+#include <xkbcommon/xkbcommon.h>
 
 using namespace rustamarine;
 using namespace Aquamarine;
@@ -54,6 +56,13 @@ Mouse::Mouse(SP<Aquamarine::IPointer> pointer, InputManager *inputManager)
 					break;
     }
 	});
+	onButtonChangeListener = pointer->events.button.registerListener([this](std::any d) {
+	  auto e = std::any_cast<Aquamarine::IPointer::SButtonEvent>(d);
+		this->mouseButtonStates[e.button-272] = {
+ 			e.pressed,
+ 			true
+		};
+	});
 	// Listen for pointer disconnect
 	onDisconnectListener =
 			pointer->events.destroy.registerListener([this](std::any) {
@@ -101,7 +110,6 @@ Keyboard::Keyboard(SP<Aquamarine::IKeyboard> keyboard,
 				bool prevDown = state.down;
 				state.down = pressed;
 				state.justChanged = (state.down != prevDown);
-				state.shouldTypeChar = state.shouldTypeChar && state.justChanged;
 				state.repeating = false;
 				state.stateChangedTimestamp = timeMs;
 
@@ -200,12 +208,24 @@ std::string Keyboard::keysymToUtf8(xkb_keysym_t keysym) {
 }
 
 void Keyboard::handleKeyEvent(xkb_keysym_t keysym) {
-
-	// Skip non-printable keysyms
 	if (keysym == XKB_KEY_NoSymbol) {
 		return;
 	}
-
+	// Ignore non-printable keys
+	// Skip keys that don't produce printable characters
+	if (keysym >= 0xfd00 && keysym <= 0xffff) {  // Function keys, multimedia keys, etc.
+					return;
+	}
+	// Skip common control keys
+	if (keysym == XKB_KEY_BackSpace || keysym == XKB_KEY_Tab ||
+					keysym == XKB_KEY_Return || keysym == XKB_KEY_Escape ||
+					keysym == XKB_KEY_Delete || keysym == XKB_KEY_Home ||
+					keysym == XKB_KEY_End || keysym == XKB_KEY_Page_Up ||
+					keysym == XKB_KEY_Page_Down || keysym == XKB_KEY_Insert ||
+					(keysym >= XKB_KEY_F1 && keysym <= XKB_KEY_F35) ||  // Function keys
+					(keysym >= XKB_KEY_KP_Space && keysym <= XKB_KEY_KP_Equal)) {  // Keypad keys
+					return;
+	}
 	// Check if any control or alt modifiers are active
 	bool ctrl_active =
 			xkb_state_mod_name_is_active(xkbState, XKB_MOD_NAME_CTRL,
@@ -217,48 +237,31 @@ void Keyboard::handleKeyEvent(xkb_keysym_t keysym) {
 	if (ctrl_active || alt_active) {
 		return;
 	}
-
-	// Skip non-printable keys
-	if (!xkb_keysym_to_utf8(keysym, nullptr, 0)) {
-		return;
-	}
-
-	// Handle compose sequence if available
-	if (xkbComposeState) {
-		xkb_compose_feed_result result =
-				xkb_compose_state_feed(xkbComposeState, keysym);
-
-		if (result == XKB_COMPOSE_FEED_ACCEPTED) {
-			xkb_compose_status status = xkb_compose_state_get_status(xkbComposeState);
-
-			if (status == XKB_COMPOSE_COMPOSED) {
-				// Composition complete, get the composed string
-				char buffer[64];
-				int len =
-						xkb_compose_state_get_utf8(xkbComposeState, buffer, sizeof(buffer));
-
-				if (len > 0) {
-					buffer[len] = '\0';
-					inputManager->currentFrameUtf8Input += std::string(buffer);
-				}
-
-				xkb_compose_state_reset(xkbComposeState);
-				return;
-			} else if (status == XKB_COMPOSE_NOTHING ||
-								 status == XKB_COMPOSE_CANCELLED) {
-				xkb_compose_state_reset(xkbComposeState);
-			} else {
-				// Still composing, wait for more input
-				return;
-			}
+  char buffer[128] = {0};
+  int bufferLen;
+  bool composed = false;
+  if(xkbComposeState && xkb_compose_state_feed(xkbComposeState, keysym) == XKB_COMPOSE_FEED_ACCEPTED) {
+    switch(xkb_compose_state_get_status(xkbComposeState)) {
+  		case XKB_COMPOSE_NOTHING:
+  		  break;
+  		case XKB_COMPOSE_COMPOSING:
+  		  return;
+  		case XKB_COMPOSE_COMPOSED:
+    		bufferLen = xkb_compose_state_get_utf8(xkbComposeState, buffer, sizeof(buffer))+1;
+        keysym = xkb_compose_state_get_one_sym(xkbComposeState);
+        composed = true;
+    		break;
+  		case XKB_COMPOSE_CANCELLED:
+  		  xkb_compose_state_reset(xkbComposeState);
+  			return;
 		}
 	}
-
-	// No compose or compose not applicable, convert directly to UTF-8
-	std::string utf8 = keysymToUtf8(keysym);
-	if (!utf8.empty()) {
-		inputManager->currentFrameUtf8Input += utf8;
+	if(!composed) {
+	  bufferLen = xkb_keysym_to_utf8(keysym, buffer, sizeof(buffer));
 	}
+	buffer[bufferLen] = 0;
+	inputManager->currentFrameUtf8Input = inputManager->currentFrameUtf8Input + buffer;
+	std::println("{}", inputManager->currentFrameUtf8Input);
 }
 
 // Implementation of InputManager
@@ -280,9 +283,6 @@ InputManager::InputManager(SP<Rustamarine> rmar) : rmar(rmar) {
 			});
 }
 
-const std::string &InputManager::getUtf8Characters() {
-	return currentFrameUtf8Input;
-}
 
 // xkbcommon modifier names
 #define XKB_MOD_NAME_SHIFT "Shift"
@@ -299,7 +299,7 @@ static inline uint32_t getCurrentTimeMs() {
 			duration_cast<milliseconds>(steady_clock::now().time_since_epoch())
 					.count());
 }
-void InputManager::onPollEvents() {
+void InputManager::onFrameEnd() {
 
 	// Reset mouse delta for the new frame
 	mouseDeltaX = 0;
@@ -358,32 +358,23 @@ void InputManager::onPollEvents() {
 		}
 }
 bool rmarIsKeyDown(Rustamarine *rmar, uint32_t key) {
-	if (!rmar)
+  if (!rmar)
 		return false;
 	for (auto &kb : rmar->inputManager.keyboards) {
-		auto it = kb->keystates.find(key);
-		if (it != kb->keystates.end() && it->second.down)
-			return true;
+	  if(!kb->keystates.contains(key)) continue;
+		auto it = kb->keystates[key];
+		if (!it.down) return true;
 	}
 	return false;
 }
 
 bool rmarIsKeyPressed(Rustamarine *rmar, uint32_t key) {
-	if (!rmar)
+  if (!rmar)
 		return false;
 	for (auto &kb : rmar->inputManager.keyboards) {
-		auto it = kb->keystates.find(key);
-		if (it != kb->keystates.end() && it->second.down) {
-			// If key is down in this keyboard, justChanged must be true in all such
-			// keyboards
-			for (auto &kb2 : rmar->inputManager.keyboards) {
-				auto it2 = kb2->keystates.find(key);
-				if (it2 != kb2->keystates.end() && it2->second.down &&
-						!it2->second.justChanged)
-					return false;
-			}
-			return true;
-		}
+	if(!kb->keystates.contains(key)) continue;
+		auto it = kb->keystates[key];
+		if (it.down && it.justChanged) return true;
 	}
 	return false;
 }
@@ -392,18 +383,9 @@ bool rmarIsKeyReleased(Rustamarine *rmar, uint32_t key) {
 	if (!rmar)
 		return false;
 	for (auto &kb : rmar->inputManager.keyboards) {
-		auto it = kb->keystates.find(key);
-		if (it != kb->keystates.end() && !it->second.down) {
-			// This keyboard has the key up, now check all keyboards with down ==
-			// false
-			for (auto &kb2 : rmar->inputManager.keyboards) {
-				auto it2 = kb2->keystates.find(key);
-				if (it2 != kb2->keystates.end() && !it2->second.down &&
-						!it2->second.justChanged)
-					return false;
-			}
-			return true;
-		}
+	if(!kb->keystates.contains(key)) continue;
+		auto it = kb->keystates[key];
+		if (!it.down && it.justChanged) return true;
 	}
 	return false;
 }
@@ -412,8 +394,9 @@ bool rmarShouldTypeKey(Rustamarine *rmar, uint32_t key) {
 	if (!rmar)
 		return false;
 	for (auto &kb : rmar->inputManager.keyboards) {
-		auto it = kb->keystates.find(key);
-		if (it != kb->keystates.end() && it->second.shouldTypeChar)
+		auto it = kb->keystates[key];
+		if(!kb->keystates.contains(key)) continue;
+		if (it.shouldTypeChar)
 			return true;
 	}
 	return false;
@@ -423,8 +406,9 @@ bool rmarIsMouseButtonDown(Rustamarine *rmar, uint32_t button) {
 	if (!rmar)
 		return false;
 	for (auto &mouse : rmar->inputManager.mouses) {
-		auto it = mouse->mouseButtonStates.find(button);
-		if (it != mouse->mouseButtonStates.end() && it->second.down)
+	  if(!mouse->mouseButtonStates.contains(button)) continue;
+		auto it = mouse->mouseButtonStates[button];
+		if (it.down)
 			return true;
 	}
 	return false;
@@ -434,10 +418,10 @@ bool rmarIsMouseButtonPressed(Rustamarine *rmar, uint32_t button) {
 	if (!rmar)
 		return false;
 	for (auto &mouse : rmar->inputManager.mouses) {
-		auto it = mouse->mouseButtonStates.find(button);
-		if (it != mouse->mouseButtonStates.end() && it->second.down &&
-				it->second.justChanged)
-			return true;
+ if(!mouse->mouseButtonStates.contains(button)) continue;
+
+		auto it = mouse->mouseButtonStates[button];
+		if(it.down && it.justChanged) return true;
 	}
 	return false;
 }
@@ -446,10 +430,10 @@ bool rmarIsMouseButtonReleased(Rustamarine *rmar, uint32_t button) {
 	if (!rmar)
 		return false;
 	for (auto &mouse : rmar->inputManager.mouses) {
-		auto it = mouse->mouseButtonStates.find(button);
-		if (it != mouse->mouseButtonStates.end() && !it->second.down &&
-				it->second.justChanged)
-			return true;
+ if(!mouse->mouseButtonStates.contains(button)) continue;
+
+		auto it = mouse->mouseButtonStates[button];
+		if (!it.down && it.justChanged) return true;
 	}
 	return false;
 }
@@ -478,19 +462,16 @@ int rmarGetMouseDeltaY(Rustamarine *rmar) {
 	return static_cast<int>(rmar->inputManager.mouseDeltaY);
 }
 
-int rmarGetMouseScrollX(Rustamarine *rmar) {
+double rmarGetMouseScrollX(Rustamarine *rmar) {
 	return rmar->inputManager.mouseScrollX;
 }
 
-int rmarGetMouseScrollY(Rustamarine *rmar) {
+double rmarGetMouseScrollY(Rustamarine *rmar) {
 	return rmar->inputManager.mouseScrollY;
 }
 
 const char *rmarGetTypedCharacters(Rustamarine *rmar) {
-	if (!rmar) {
-		return "";
-	}
-	return rmar->inputManager.getUtf8Characters().c_str();
+	return rmar->inputManager.currentFrameUtf8Input.data();
 }
 
 void rmarSetMouseX(Rustamarine *rmar, int x) {

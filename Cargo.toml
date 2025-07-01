@@ -6,7 +6,7 @@ edition = "2021"
 members = ["./rustamarine"]
 [dependencies]
 color-eyre = "0.6.3"
-skia-safe = { version = "0.82.0", features = ["gl"] }
+skia-safe = { version = "0.86.0", features = ["gl"] }
 smol = "2.0.2"
 zbus_systemd = { version = "0.25701.0", features = ["systemd1"] }
 futures-util = "0.3.31"
@@ -23,6 +23,7 @@ rustamarine = {path = "./rustamarine"}
 [dependencies.clay-layout]
 features = ["debug", "skia-renderer"]
 git = "https://github.com/coffeeispower/clay-rs"
-
+branch = "tibs-version"
+# path="./clay-rs"
 [build-dependencies]
 gl_generator = "0"

@@ -67,6 +67,7 @@ fn main() {
 		}
 		let mouse_x = rustamarine.get_mouse_x();
 		let mouse_y = rustamarine.get_mouse_y();
+		dbg!(mouse_x, mouse_y);
 		let screens = rustamarine.screens();
 		for (_i, mut screen) in screens.into_iter().enumerate() {
 			let cursor_x = mouse_x;

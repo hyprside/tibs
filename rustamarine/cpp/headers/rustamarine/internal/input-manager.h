@@ -35,8 +35,8 @@ namespace rustamarine {
 		explicit Mouse(SP<Aquamarine::IPointer> pointer, InputManager* inputManager);
 		InputManager* inputManager;
 		SP<Aquamarine::IPointer> pointer;
-		CHyprSignalListener onRelativeMoveListenerListener, onWarpListener, onScrollListener, onDisconnectListener;
-		std::map<uint8_t, MouseButtonState> mouseButtonStates;
+		CHyprSignalListener onRelativeMoveListenerListener, onWarpListener, onScrollListener, onButtonChangeListener, onDisconnectListener;
+		std::map<uint32_t, MouseButtonState> mouseButtonStates;
 		friend InputManager;
 
 	};
@@ -77,8 +77,7 @@ namespace rustamarine {
 		explicit InputManager(SP<Rustamarine> rmar);
 
 		// Get UTF-8 character string for the current frame
-		const std::string& getUtf8Characters();
-		void onPollEvents();
+		void onFrameEnd();
 		CHyprSignalListener
 			onNewKeyboardListener,
 			onNewMouseListener;

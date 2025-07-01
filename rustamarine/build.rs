@@ -16,7 +16,14 @@ fn main() {
 	);
 	println!("cargo:rustc-link-lib=static=rustamarine-cpp");
 	// Linkar bibliotecas encontradas via pkg-config
-	for lib in &["aquamarine", "hyprutils", "libdrm", "gbm", "libunwind", "xkbcommon"] {
+	for lib in &[
+		"aquamarine",
+		"hyprutils",
+		"libdrm",
+		"gbm",
+		"libunwind",
+		"xkbcommon",
+	] {
 		let libs = pkg_config::probe_library(lib).expect(&format!("Failed to find {}", lib));
 		for path in libs.link_paths {
 			println!("cargo:rustc-link-search=native={}", path.display());

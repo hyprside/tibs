@@ -429,8 +429,8 @@ dependencies = [
 
 [[package]]
 name = "clay-layout"
-version = "0.2.0"
-source = "git+https://github.com/coffeeispower/clay-rs#a7b31623afa95b0fdbd13b9639938fe412671f88"
+version = "0.4.0"
+source = "git+https://github.com/coffeeispower/clay-rs?branch=tibs-version#6895171005c66626d3f3cb5b5337056a10f2c784"
 dependencies = [
  "cc",
  "skia-safe",
@@ -1436,9 +1436,9 @@ dependencies = [
 
 [[package]]
 name = "skia-bindings"
-version = "0.82.0"
+version = "0.86.1"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "882318e42c24465c2b2140e9b2012c5d44217f680851aebb6884c64dee299156"
+checksum = "a2bf215f640b53293844d441e93448b437ca4937595f60e3317fbb03d7ac6783"
 dependencies = [
  "bindgen 0.71.1",
  "cc",
@@ -1453,9 +1453,9 @@ dependencies = [
 
 [[package]]
 name = "skia-safe"
-version = "0.82.0"
+version = "0.86.1"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "db978a1042d9fb18a89617e349b1935af176068290b548dea2c89b49528aa361"
+checksum = "e372258f52414e04de007326fa497581617c9fa872a3225dca5e42212723c426"
 dependencies = [
  "bitflags 2.8.0",
  "lazy_static",
@@ -1793,7 +1793,7 @@ version = "0.1.9"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "cf221c93e13a30d793f7645a0e7762c55d169dbb0a49671918a2319d289b10bb"
 dependencies = [
- "windows-sys 0.59.0",
+ "windows-sys 0.48.0",
 ]
 
 [[package]]

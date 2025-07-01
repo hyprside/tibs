@@ -10,8 +10,11 @@
 #include <rustamarine/internal/rustamarine.hpp>
 
 bool enableDebugLogs = !strcmp(std::getenv("AQ_ENABLE_DEBUG_LOGS") ? std::getenv("AQ_ENABLE_DEBUG_LOGS") : "", "1");
+bool enableTraceLogs = !strcmp(std::getenv("AQ_ENABLE_TRACE_LOGS") ? std::getenv("AQ_ENABLE_TRACE_LOGS") : "", "1");
 void aqLog(Aquamarine::eBackendLogLevel level, std::string msg) {
 	if (level == Aquamarine::AQ_LOG_DEBUG && !enableDebugLogs)
+		return;
+	if (level == Aquamarine::AQ_LOG_TRACE && !enableTraceLogs)
 		return;
 	std::cout << "[AQ] [" << aqLevelToString(level) << "] " << msg << "\n";
 }
@@ -66,14 +69,14 @@ void rmarPollEvents(struct Rustamarine *self) {
 	for (auto &screen : self->screens) {
 		screen->isVBlank = false;
 	}
-	self->inputManager.onPollEvents();
 
+	self->inputManager.onFrameEnd();
 	auto pollFDs = self->backend->getPollFDs();
 	std::vector<pollfd> fds;
 	for (const auto &pfd : pollFDs) {
 		fds.push_back({pfd->fd, POLLIN, 0});
 	}
-	int ret = poll(fds.data(), fds.size(), self->backend->hasSession() ? -1 : 1);
+	int ret = poll(fds.data(), fds.size(), -1);
 	if (ret > 0) {
 		for (size_t i = 0; i < fds.size(); ++i) {
 			if (fds[i].revents & POLLIN) {

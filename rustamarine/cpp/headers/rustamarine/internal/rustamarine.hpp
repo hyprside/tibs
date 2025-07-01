@@ -11,7 +11,7 @@
 #include <vector>
 
 struct RustamarineOpenGLContext {
-	void *gbmDevice, *eglDevice, *eglDisplay, *eglContext;
+	void *gbmDevice = nullptr, *eglDevice = nullptr, *eglDisplay = nullptr, *eglContext = nullptr;
 	Hyprutils::OS::CFileDescriptor gbmFd;
 };
 struct Rustamarine {

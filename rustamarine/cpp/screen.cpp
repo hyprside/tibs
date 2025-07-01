@@ -59,12 +59,6 @@ SP<RustamarineScreen> createScreenFromOutput(SP<Rustamarine> rustamarine,
     std::string                              requestedStr = "unknown";
 
 
-    // last fallback is always preferred mode
-    if (!output->preferredMode())
-        printf("ERROR: Monitor %s has NO PREFERRED MODE\n", output->name.c_str());
-    else
-        requestedModes.push_back(output->preferredMode());
-
     requestedStr = "preferred";
 
     // fallback to first 3 modes if preferred fails/doesn't exist
@@ -73,7 +67,9 @@ SP<RustamarineScreen> createScreenFromOutput(SP<Rustamarine> rustamarine,
         requestedModes.erase(requestedModes.begin() + 3, requestedModes.end());
     std::ranges::reverse(requestedModes.begin(), requestedModes.end());
 
-    if (output->preferredMode())
+    if (!output->preferredMode())
+        printf("ERROR: Monitor %s has NO PREFERRED MODE\n", output->name.c_str());
+    else
         requestedModes.push_back(output->preferredMode());
 
     const auto OLDRES  = output->physicalSize;

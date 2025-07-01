@@ -51,8 +51,8 @@ void rmarSetMouseX(struct Rustamarine* rmar, int x);
 void rmarSetMouseY(struct Rustamarine* rmar, int y);
 int rmarGetMouseDeltaX(struct Rustamarine* rmar);
 int rmarGetMouseDeltaY(struct Rustamarine* rmar);
-int rmarGetMouseScrollX(struct Rustamarine* rmar);
-int rmarGetMouseScrollY(struct Rustamarine* rmar);
+double rmarGetMouseScrollX(struct Rustamarine* rmar);
+double rmarGetMouseScrollY(struct Rustamarine* rmar);
 
 
 const char* rmarGetTypedCharacters(struct Rustamarine* rmar);

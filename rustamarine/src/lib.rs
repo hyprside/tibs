@@ -1,5 +1,7 @@
 use std::{
 	ffi::{c_void, CString},
+	marker::PhantomData,
+	mem::ManuallyDrop,
 	str::FromStr,
 };
 
@@ -34,5 +36,24 @@ impl Drop for Rustamarine {
 		unsafe {
 			sys::rmarTearDown(self.inner);
 		}
+	}
+}
+
+pub struct RustamarineRef<'r> {
+	pub(crate) inner: ManuallyDrop<Rustamarine>,
+	pub(crate) _e: PhantomData<&'r ()>,
+}
+
+impl std::ops::Deref for RustamarineRef<'_> {
+	type Target = Rustamarine;
+
+	fn deref(&self) -> &Self::Target {
+		&self.inner
+	}
+}
+
+impl std::ops::DerefMut for RustamarineRef<'_> {
+	fn deref_mut(&mut self) -> &mut Self::Target {
+		&mut self.inner
 	}
 }

@@ -205,13 +205,14 @@ void initializeOpenGL(SP<Rustamarine> rmar) {
 	printf("[LOG] Renderer: %s\n", (char *)glGetString(GL_RENDERER));
 }
 void tearDownOpenGL(RustamarineOpenGLContext *opengl) {
-	if (opengl->eglContext != EGL_NO_CONTEXT) {
+	if (opengl->eglDisplay != nullptr && opengl->eglContext != nullptr) {
 		eglDestroyContext(opengl->eglDisplay, opengl->eglContext);
 	}
 	eglReleaseThread();
 }
 void *rmarGetProcAddress(struct Rustamarine *, const char *procName) {
-	return (void *)eglGetProcAddress(procName);
+  auto fn = (void *)eglGetProcAddress(procName);
+	return fn;
 }
 void ensureOpenGLInitialized(SP<Rustamarine> rmar) {
  if (rmar->openGLContext.eglContext == EGL_NO_CONTEXT) {

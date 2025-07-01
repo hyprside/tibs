@@ -1,11 +1,20 @@
+use std::{marker::PhantomData, mem::ManuallyDrop};
+
+use crate::{Rustamarine, RustamarineRef};
+
 use super::sys;
 pub struct Screen<'a> {
 	inner: &'a mut sys::RustamarineScreen,
 }
 
 impl<'a> Screen<'a> {
-	pub fn get_rustamarine<'b>(&'b mut self) -> &'b mut sys::Rustamarine {
-		unsafe { &mut *sys::rmarFromScreen(self.inner) }
+	pub fn get_rustamarine(&mut self) -> RustamarineRef<'a> {
+		crate::RustamarineRef {
+			inner: ManuallyDrop::new(Rustamarine {
+				inner: unsafe { &mut *sys::rmarFromScreen(self.inner) },
+			}),
+			_e: PhantomData,
+		}
 	}
 	pub fn use_screen(&mut self) {
 		unsafe {

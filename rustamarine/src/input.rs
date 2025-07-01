@@ -143,7 +143,7 @@ impl Rustamarine {
 	/// # Returns
 	///
 	/// The horizontal scroll amount since the last frame
-	pub fn get_mouse_scroll_x(&self) -> i32 {
+	pub fn get_mouse_scroll_x(&self) -> f64 {
 		unsafe { sys::rmarGetMouseScrollX(self.inner) }
 	}
 
@@ -152,7 +152,7 @@ impl Rustamarine {
 	/// # Returns
 	///
 	/// The vertical scroll amount since the last frame (positive is down, negative is up)
-	pub fn get_mouse_scroll_y(&self) -> i32 {
+	pub fn get_mouse_scroll_y(&self) -> f64 {
 		unsafe { sys::rmarGetMouseScrollY(self.inner) }
 	}
 	/// Set the mouse X position.
