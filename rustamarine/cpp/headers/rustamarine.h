@@ -1,9 +1,12 @@
 #pragma once
+
+
 #ifdef __cplusplus
 extern "C" {
 #endif
 #include <stdbool.h>
 #include <stddef.h>
+#include <stdint.h>
 
 struct RustamarineScreen;
 struct Rustamarine;
@@ -27,11 +30,32 @@ struct Rustamarine *rmarFromScreen(struct RustamarineScreen *screen);
 void rmarScreenSetOnRender(struct RustamarineScreen *screen,
 													 void (*callback)(void *, struct RustamarineScreen *),
 													 void *context);
-int rmarScreenGetWidth(const struct RustamarineScreen *screen);
-int rmarScreenGetHeight(const struct RustamarineScreen *screen);
+unsigned int rmarScreenGetWidth(const struct RustamarineScreen *screen);
+unsigned int rmarScreenGetHeight(const struct RustamarineScreen *screen);
 float rmarScreenGetRefreshRate(const struct RustamarineScreen *screen);
 const char *rmarScreenGetName(const struct RustamarineScreen *screen);
 bool rmarScreenIsEnabled(const struct RustamarineScreen *screen);
+
+bool rmarIsKeyDown(struct Rustamarine* rmar, uint32_t key);
+bool rmarIsKeyPressed(struct Rustamarine* rmar, uint32_t key);
+bool rmarShouldTypeKey(struct Rustamarine* rmar, uint32_t key);
+bool rmarIsKeyReleased(struct Rustamarine* rmar, uint32_t key);
+
+bool rmarIsMouseButtonDown(struct Rustamarine* rmar, uint32_t button);
+bool rmarIsMouseButtonPressed(struct Rustamarine* rmar, uint32_t button);
+bool rmarIsMouseButtonReleased(struct Rustamarine* rmar, uint32_t button);
+
+int rmarGetMouseX(struct Rustamarine* rmar);
+int rmarGetMouseY(struct Rustamarine* rmar);
+void rmarSetMouseX(struct Rustamarine* rmar, int x);
+void rmarSetMouseY(struct Rustamarine* rmar, int y);
+int rmarGetMouseDeltaX(struct Rustamarine* rmar);
+int rmarGetMouseDeltaY(struct Rustamarine* rmar);
+int rmarGetMouseScrollX(struct Rustamarine* rmar);
+int rmarGetMouseScrollY(struct Rustamarine* rmar);
+
+
+const char* rmarGetTypedCharacters(struct Rustamarine* rmar);
 #ifdef __cplusplus
 }
 #endif

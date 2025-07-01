@@ -12,8 +12,13 @@ gl_generator = { version="0", optional = true }
 rand = "0.9"
 
 [features]
+default = ["opengl_loader"]
 opengl_loader = ["dep:gl_generator"]
 
 [[example]]
 name = "epilepsy_vsync_test"
+required-features = ["opengl_loader"]
+
+[[example]]
+name = "mouse_cursor_example"
 required-features = ["opengl_loader"]

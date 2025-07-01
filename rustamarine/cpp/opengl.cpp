@@ -177,8 +177,6 @@ static void EGLAPIENTRY eglLog(EGLenum error, const char *command,
 }
 void initializeOpenGL(SP<Rustamarine> rmar) {
 	gladLoadEGL();
-	// if (gladLoadEGL() && gladLoadGLES2Loader((GLADloadproc)eglGetProcAddress))
-	// 	return;
 	static const EGLAttrib debugAttrs[] = {
 			EGL_DEBUG_MSG_CRITICAL_KHR,
 			EGL_TRUE,
@@ -191,6 +189,12 @@ void initializeOpenGL(SP<Rustamarine> rmar) {
 			EGL_NONE,
 	};
 	eglDebugMessageControlKHR(::eglLog, debugAttrs);
+	if (gladLoadGLES2Loader((GLADloadproc)eglGetProcAddress)){
+		rmar->openGLContext.eglDisplay = eglGetCurrentDisplay();
+		rmar->openGLContext.eglContext = eglGetCurrentContext();
+		rmar->openGLContext.eglDevice = eglDeviceFromDRMFD(rmar->backend->drmFD());
+		return;
+	}
 	eglBindAPI(EGL_OPENGL_ES_API);
 	initEGL(rmar);
 	if (!gladLoadGLES2Loader((GLADloadproc)eglGetProcAddress))

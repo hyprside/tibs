@@ -4,21 +4,20 @@ project(rustamarine-cpp LANGUAGES C CXX)
 set(CMAKE_CXX_STANDARD 23)
 
 # Include dirs (podem vir do Rust depois via ENV vars se necessário)
+# Automatically collect all .cpp, .c, .hpp, .h files, ignoring the build directory
+file(GLOB_RECURSE RUSTAMARINE_CPP_SOURCES
+    RELATIVE ${CMAKE_CURRENT_SOURCE_DIR}
+    *.cpp
+    *.c
+    *.hpp
+    *.h
+)
+
+# Remove files in the build directory from the list
+list(FILTER RUSTAMARINE_CPP_SOURCES EXCLUDE REGEX "^build/")
 
 add_library(rustamarine-cpp STATIC
-    rustamarine.cpp
-    headers/rustamarine/internal/rustamarine.hpp
-    screen.cpp
-    headers/rustamarine/internal/screen.hpp
-    opengl.cpp
-    renderbuffer.cpp
-    egl_sync.cpp
-    segfault-handler.cpp
-    headers/rustamarine/internal/opengl.hpp
-    headers/rustamarine/internal/utils.hpp
-    headers/rustamarine.h
-    vendor/glad/src/glad_egl.c
-    vendor/glad/src/glad.c
+    ${RUSTAMARINE_CPP_SOURCES}
 )
 
 # Se precisares de pkg-config, podes usar isso

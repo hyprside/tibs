@@ -115,9 +115,16 @@ rustamarine::RenderBuffer::RenderBuffer(SP<Aquamarine::IBuffer> buffer,
 			});
 
 	this->isValid = true;
+	printf("Created renderbuffer:\n");
+	printf("  RenderBufferID: %u\n", this->renderBufferID);
+	printf("  FrameBufferID: %u\n", this->frameBufferID);
+	printf("  EGLImage: %p\n", (void*)this->eglImage);
+	printf("  Size: %lux%lu\n", this->width, this->height);
+
 }
 
 rustamarine::RenderBuffer::~RenderBuffer() {
+	printf("render buffer destroyed\n");
 	if (!this->isValid)
 		return;
 	if (this->frameBufferID) {
@@ -139,5 +146,6 @@ rustamarine::RenderBuffer::~RenderBuffer() {
 
 void rustamarine::RenderBuffer::bind() {
 	glBindRenderbuffer(GL_RENDERBUFFER, this->renderBufferID);
+	glViewport(0, 0, this->width, this->height);
 	glBindFramebuffer(GL_DRAW_FRAMEBUFFER, this->frameBufferID);
 }

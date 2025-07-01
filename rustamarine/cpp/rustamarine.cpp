@@ -1,12 +1,18 @@
 #include "rustamarine.h"
 #include "aquamarine/backend/Backend.hpp"
 #include <aquamarine/output/Output.hpp>
+#include <cstdlib>
+#include <cstring>
 #include <hyprutils/memory/SharedPtr.hpp>
 #include <iostream>
 #include <poll.h>
 #include <rustamarine/internal/opengl.hpp>
 #include <rustamarine/internal/rustamarine.hpp>
+
+bool enableDebugLogs = !strcmp(std::getenv("AQ_ENABLE_DEBUG_LOGS") ? std::getenv("AQ_ENABLE_DEBUG_LOGS") : "", "1");
 void aqLog(Aquamarine::eBackendLogLevel level, std::string msg) {
+	if (level == Aquamarine::AQ_LOG_DEBUG && !enableDebugLogs)
+		return;
 	std::cout << "[AQ] [" << aqLevelToString(level) << "] " << msg << "\n";
 }
 std::vector<Aquamarine::SBackendImplementationOptions> getBackendsList() {
@@ -37,7 +43,7 @@ void setupEventListeners(SP<Rustamarine> rmar) {
 						rmar->screens.push_back(createScreenFromOutput(rmar, output));
 					});
 }
-void setup_segfault_handler();
+
 Rustamarine *rmarInitialize() {
 	setup_segfault_handler();
 	Aquamarine::SBackendOptions options;
@@ -47,6 +53,7 @@ Rustamarine *rmarInitialize() {
 	SP<Rustamarine> rmar(
 			new Rustamarine{.backend = aqBackend, .screens = {}, .listeners = {}});
 	setupEventListeners(rmar);
+	rmar->inputManager = rustamarine::InputManager(rmar);
 	if (!rmar->backend->start())
 		panic("Failed to start aquamarine backend");
 	initializeOpenGL(rmar);
@@ -59,12 +66,14 @@ void rmarPollEvents(struct Rustamarine *self) {
 	for (auto &screen : self->screens) {
 		screen->isVBlank = false;
 	}
+	self->inputManager.onPollEvents();
+
 	auto pollFDs = self->backend->getPollFDs();
 	std::vector<pollfd> fds;
 	for (const auto &pfd : pollFDs) {
 		fds.push_back({pfd->fd, POLLIN, 0});
 	}
-	int ret = poll(fds.data(), fds.size(), 1);
+	int ret = poll(fds.data(), fds.size(), self->backend->hasSession() ? -1 : 1);
 	if (ret > 0) {
 		for (size_t i = 0; i < fds.size(); ++i) {
 			if (fds[i].revents & POLLIN) {

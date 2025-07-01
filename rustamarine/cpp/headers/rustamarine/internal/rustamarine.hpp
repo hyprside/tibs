@@ -7,6 +7,7 @@
 #include <hyprutils/signal/Listener.hpp>
 #include <rustamarine.h>
 #include <rustamarine/internal/screen.hpp>
+#include <rustamarine/internal/input-manager.h>
 #include <vector>
 
 struct RustamarineOpenGLContext {
@@ -20,8 +21,10 @@ struct Rustamarine {
 		Hyprutils::Signal::CHyprSignalListener newOutputListener;
 	} listeners;
 	RustamarineOpenGLContext openGLContext;
+	rustamarine::InputManager inputManager;
 };
 #undef Listener
 
 SP<RustamarineScreen> createScreenFromOutput(SP<Rustamarine> rustamarine,
 																						 SP<Aquamarine::IOutput> output);
+void setup_segfault_handler();

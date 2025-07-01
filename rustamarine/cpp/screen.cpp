@@ -2,13 +2,16 @@
 #include "rustamarine.h"
 #include <algorithm>
 #include <aquamarine/output/Output.hpp>
+#include <cstdint>
 #include <cstdio>
 #include <hyprutils/math/Region.hpp>
 
 #include <cstring>
 #include <hyprutils/memory/SharedPtr.hpp>
 #include <ranges>
+#include <unistd.h>
 #include <vector>
+#include <print>
 #include <algorithm>
 #include <rustamarine/internal/rustamarine.hpp>
 using namespace Hyprutils::Math;
@@ -34,8 +37,7 @@ SP<RustamarineScreen> createScreenFromOutput(SP<Rustamarine> rustamarine,
         output->events.needsFrame.registerListener([screen](std::any _) {
             if (screenIsInactive(&*screen))
                 return;
-            screen->output->scheduleFrame(
-                Aquamarine::IOutput::AQ_SCHEDULE_NEEDS_FRAME);
+
         });
     screen->frameListener =
         output->events.frame.registerListener([screen](std::any _) {
@@ -172,7 +174,6 @@ RustamarineScreen::getOrCreateRenderbuffer(SP<Aquamarine::IBuffer> buffer,
 												 [&](const SP<rustamarine::RenderBuffer> &rb) {
 													 return rb && rb->valid() && rb->isBuffer(buffer);
 												 });
-
 	if (it != this->renderBuffers.end())
 		return *it;
 
@@ -195,7 +196,7 @@ void rmarUseScreen(struct RustamarineScreen *screen) {
 		screen->currentBuffer = screen->getOrCreateRenderbuffer(
 				newBuffer, screen->output->state->state().drmFormat);
 		if (!screen->currentBuffer.get())
-			return;
+			panic("Failed to create render buffer")
 	}
 	screen->currentBuffer->bind();
 }
@@ -203,7 +204,8 @@ void rmarUseScreen(struct RustamarineScreen *screen) {
 void rmarSwapBuffers(struct RustamarineScreen *self) {
 	RASSERT(self->isVBlank, "Tried to swap buffers of screen {} out of vblank",
 					self->output->name);
-	self->output->scheduleFrame(Aquamarine::IOutput::AQ_SCHEDULE_DAMAGE);
+
+
 
 	if (!self->currentBuffer.get()) {
 		return;
@@ -219,9 +221,9 @@ void rmarSwapBuffers(struct RustamarineScreen *self) {
 	}
 	self->output->state->setPresentationMode(
 			Aquamarine::AQ_OUTPUT_PRESENTATION_VSYNC);
-	auto damageRegion = Hyprutils::Math::CRegion(
-			0, 0, self->output->physicalSize.x, self->output->physicalSize.y);
-	self->output->state->addDamage(damageRegion);
+	// auto damageRegion = Hyprutils::Math::CRegion(
+	// 		0, 0, self->output->physicalSize.x, self->output->physicalSize.y);
+	// self->output->state->addDamage(damageRegion);
 	RASSERT(self->output->commit(), "Failed to commit");
 	self->currentBuffer.reset();
 }
@@ -247,10 +249,11 @@ RustamarineScreen::~RustamarineScreen() {
 	}
 }
 
-extern "C" void rmarScreenSetOnRender(RustamarineScreen *screen,
-																			void (*callback)(void *,
-																											 RustamarineScreen *),
-																			void *context) {
+extern "C" void rmarScreenSetOnRender(
+	RustamarineScreen *screen,
+	void (*callback)(void *, RustamarineScreen *), // callback: fn(*mut c_void, *mut RustamarineScreen)
+	void *context
+) {
 	// Free previous closure if present
 	if (screen->onRenderContext) {
 		rmarFreeRustClosure(screen->onRenderContext);
@@ -258,4 +261,42 @@ extern "C" void rmarScreenSetOnRender(RustamarineScreen *screen,
 	}
 	screen->onRenderCFunc = callback;
 	screen->onRenderContext = context;
+}
+unsigned int rmarScreenGetWidth(const struct RustamarineScreen *screen) {
+	if (!screen || !screen->output)
+		return 0;
+	const auto &state = screen->output->state->state();
+	if (state.mode)
+		return static_cast<unsigned int>(state.mode->pixelSize.x);
+	if (state.customMode)
+		return static_cast<unsigned int>(state.customMode->pixelSize.x);
+	return static_cast<unsigned int>(screen->output->physicalSize.x);
+}
+
+unsigned int rmarScreenGetHeight(const struct RustamarineScreen *screen) {
+	if (!screen || !screen->output)
+		return 0;
+	const auto &state = screen->output->state->state();
+	if (state.mode)
+		return static_cast<unsigned int>(state.mode->pixelSize.y);
+	if (state.customMode)
+		return static_cast<unsigned int>(state.customMode->pixelSize.y);
+	return static_cast<unsigned int>(screen->output->physicalSize.y);
+}
+
+float rmarScreenGetRefreshRate(const struct RustamarineScreen *screen) {
+	if (!screen || !screen->output)
+		return 0.0f;
+	const auto &state = screen->output->state->state();
+	if (state.mode)
+		return static_cast<float>(state.mode->refreshRate) / 1000.0f;
+	if (state.customMode)
+		return static_cast<float>(state.customMode->refreshRate) / 1000.0f;
+	return 0.0f;
+}
+
+const char *rmarScreenGetName(const struct RustamarineScreen *screen) {
+	if (!screen || !screen->output)
+		return "";
+	return screen->output->name.c_str();
 }
