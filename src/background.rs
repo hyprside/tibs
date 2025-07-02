@@ -63,11 +63,17 @@ impl Background {
 			forces: [f32; 5],
 		}
 		let target_colors = [
-			(1.00, 0.74, 0.63), // Laranja pastel
-			(0.87, 0.07, 0.27), // Vermelho vivo
-			(0.98, 0.91, 0.63), // Amarelo suave
-			(0.63, 0.82, 0.80), // Azul esverdeado
-			colors::rgb_to_norm("#FF8966"),
+			// (1.00, 0.74, 0.63), // Laranja pastel
+			// (0.87, 0.07, 0.27), // Vermelho vivo
+			// (0.98, 0.91, 0.63), // Amarelo suave
+			// (0.63, 0.82, 0.80), // Azul esverdeado
+			// colors::rgb_to_norm("#FF8966"),
+			colors::rgb_to_norm("#0F1419"),
+			colors::rgb_to_norm("#225282"),
+			colors::rgb_to_norm("#112f4e"),
+			colors::rgb_to_norm("#031120"),
+			colors::rgb_to_norm("#38628f"),
+
 		];
 		// Interpolação das cores com base no progresso das animações
 		let interpolated_colors: [(f32, f32, f32); 5] = target_colors
