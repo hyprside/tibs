@@ -3,29 +3,32 @@
 **Tiago's Incredible Boot Screen (TIBS)** is a (🚧 Work In Progress) boot animation program and display manager written in Rust. Designed to replace tools like Plymouth, SDDM, and GDM, TIBS delivers a smooth, modern boot experience by rendering animations with OpenGL.
 
 Current state of the UI:
-![image](https://github.com/user-attachments/assets/687cfe88-c20a-4c8d-8ed7-70bbbc67f683)
-
-![image](https://github.com/user-attachments/assets/791d1712-8cd2-4ab7-ae64-e761c5285b49)
+![loading](./screenshots/loadingscreen.png)
+![login](./screenshots/login.png)
 
 ---
 
 ## Features
 
-- **Early Boot Animation:**  
+- **Early Boot Animation:**
   Provides a seamless and visually appealing boot screen right from the start of the boot process.
 
-- **Direct DRM Rendering:**  
-  Uses DRM for direct screen output, removing the need for a wayland compositor.
+- **Direct DRM Rendering:**
+  Uses DRM powered by [Aquamarine](https://github.com/hyprwm/aquamarine) from [Hyprland](https://github.com/hyprwm/Hyprland) instead of relying on a wayland compositor like most display managers which makes it boot up incredibly fast.
 
-- **OpenGL-Powered Graphics:**  
-  Delivers high-quality, dynamic animations with hardware acceleration.
+- **OpenGL-Powered Graphics:**
+  You can throw all your lame plymouth themes, now you can theme your splash screen with custom shaders and crazy animations.
 
-- **Integrated Input Handling:**  
-  Processes keyboard and mouse input using libinput, ensuring responsive control throughout the boot sequence.
+- **Smooth Transition to the Login screen:**
+  Since tibs is both a display manager and a splash screen, the transition between the boot animation and the display manager is seemless,
+  creating a more polished experience that is impossible to replicate with existing tools.
 
-- **Scalable Cursor Rendering:**  
-  Supports modern, vector-based cursor themes via the Hyprcursors library. Hyprcursors renders the cursor to a bitmap on demand, ensuring crisp visuals without the need for multiple bitmap sizes.
+### Planned Features
 
+- [ ] Manage sessions and make login actually work
+- [ ] [hyprlock](https://github.com/hyprwm/hyprlock) replacement
+- [ ] Toml configuration
+- [ ] Lua theming
 ---
 
 ## Installation
@@ -72,7 +75,7 @@ TIBS includes a built-in NixOS module for easy integration. To activate TIBS on 
     # kind of driver your using
     # This is to prevent tibs from starting with a dummy driver
     # and then crashing when the real driver loads
-    boot.initrd.kernelModules = [ "i915" ]; 
+    boot.initrd.kernelModules = [ "i915" ];
     boot.initrd.systemd.enable = true;
 
     # OpenGL is, of course, also required for tibs to work properly
@@ -88,21 +91,9 @@ TIBS includes a built-in NixOS module for easy integration. To activate TIBS on 
 }
 ```
 
-This configuration launches TIBS as a systemd service immediately after the initramfs stage, providing an early boot animation and handling input and cursor rendering before the desktop environment takes over.
+This configuration launches TIBS as a systemd service immediately after the initramfs stage which requires some systemd and initramfs
+hackery to work properly, so this NixOS module already sets everything up for you.
 
----
-
-## Usage
-
-- **Boot Process:**  
-  TIBS runs as a systemd service early in the boot sequence. Its configuration ensures that it operates before any display manager is started, presenting a smooth boot animation.
-
-- **Customizing Animations & UI:**  
-  Modify the assets within the designated assets directory to adjust animations, progress bars, logos, and other UI elements.
-
-- **Cursor Rendering:**  
-  TIBS leverages the Hyprcursors format for scalable, vector-based cursor themes.
----
 
 ## License
 
