@@ -49,43 +49,19 @@ SP<RustamarineScreen> createScreenFromOutput(SP<Rustamarine> rustamarine,
     screen->onStateListener =
         output->events.state.registerListener([screen](std::any data) {
             auto event = std::any_cast<Aquamarine::IOutput::SStateEvent>(data);
+            screen->renderBuffers.clear();
+            screen->output->state->setEnabled(true);
+            screen->output->state->setCustomMode(Hyprutils::Memory::makeShared<Aquamarine::SOutputMode>(Aquamarine::SOutputMode{.pixelSize = event.size}));
+            screen->output->state->setFormat(DRM_FORMAT_XRGB8888);
+
         });
 
     screen->output->state->setEnabled(true);
     screen->output->state->setFormat(DRM_FORMAT_XRGB8888);
     auto name = screen->output->name;
-    // accumulate requested modes in reverse order (cause inserting at front is inefficient)
-    std::vector<SP<Aquamarine::SOutputMode>> requestedModes;
-    std::string                              requestedStr = "unknown";
-
-
-    requestedStr = "preferred";
-
-    // fallback to first 3 modes if preferred fails/doesn't exist
-    requestedModes = output->modes;
-    if (requestedModes.size() > 3)
-        requestedModes.erase(requestedModes.begin() + 3, requestedModes.end());
-    std::ranges::reverse(requestedModes.begin(), requestedModes.end());
-
-    if (!output->preferredMode())
-        printf("ERROR: Monitor %s has NO PREFERRED MODE\n", output->name.c_str());
-    else
-        requestedModes.push_back(output->preferredMode());
-
-    const auto OLDRES  = output->physicalSize;
-    bool       success = false;
-
-
-    printf("TRACE: Monitor %s requested modes:\n", name.c_str());
-    if (requestedModes.empty())
-        printf("TRACE: | None\n");
-    else {
-        for (auto const& mode : requestedModes | std::views::reverse) {
-            printf("TRACE: | %fx%f@%.2fHz\n", mode->pixelSize.x, mode->pixelSize.y, mode->refreshRate / 1000.f);
-        }
-    }
-
-    for (auto const& mode : requestedModes | std::views::reverse) {
+    std::vector<SP<Aquamarine::SOutputMode>> &requestedModes = output->modes;
+    bool success = false;
+    for (auto const& mode : requestedModes) {
         std::string modeStr = std::format("{:X0}@{:.2f}Hz", mode->pixelSize, mode->refreshRate / 1000.f);
 
         if (mode->modeInfo.has_value() && mode->modeInfo->type == DRM_MODE_TYPE_USERDEF) {
@@ -110,11 +86,11 @@ SP<RustamarineScreen> createScreenFromOutput(SP<Rustamarine> rustamarine,
         success = true;
 
         if (mode->preferred)
-            printf("LOG: Monitor %s: requested %s, using preferred mode %s\n", name.c_str(), requestedStr.c_str(), modeStr.c_str());
+            printf("LOG: Monitor %s: using preferred mode %s\n", name.c_str(), modeStr.c_str());
         else if (mode->modeInfo.has_value() && mode->modeInfo->type == DRM_MODE_TYPE_USERDEF)
-            printf("LOG: Monitor %s: requested %s, using custom mode %s\n", name.c_str(), requestedStr.c_str(), modeStr.c_str());
+            printf("LOG: Monitor %s: using custom mode %s\n", name.c_str(), modeStr.c_str());
         else
-            printf("LOG: Monitor %s: requested %s, using available mode %s\n", name.c_str(), requestedStr.c_str(), modeStr.c_str());
+            printf("LOG: Monitor %s: using available mode %s\n", name.c_str(), modeStr.c_str());
 
         break;
     }
@@ -122,11 +98,11 @@ SP<RustamarineScreen> createScreenFromOutput(SP<Rustamarine> rustamarine,
     // try requested as custom mode jic it works
     if (!success) {
         unsigned int        refreshRate = output->getBackend()->type() == Aquamarine::eBackendType::AQ_BACKEND_DRM ? 60 * 1000 : 0;
-        auto        mode        = Hyprutils::Memory::makeShared<Aquamarine::SOutputMode>(Aquamarine::SOutputMode{.pixelSize = {1920, 1080}, .refreshRate = refreshRate});
+        auto        mode        = Hyprutils::Memory::makeShared<Aquamarine::SOutputMode>(Aquamarine::SOutputMode{.pixelSize = {16*60, 9*60}, .refreshRate = refreshRate});
         std::string modeStr     = std::format("{:X0}@{:.2f}Hz", mode->pixelSize, mode->refreshRate / 1000.f);
         output->state->setCustomMode(mode);
         if (screen->test()) {
-            printf("LOG: Monitor %s: requested %s, using custom mode %s\n", name.c_str(), requestedStr.c_str(), modeStr.c_str());
+            printf("LOG: Monitor %s: using custom mode %s\n", name.c_str(), modeStr.c_str());
             refreshRate     = mode->refreshRate / 1000.f;
             success = true;
         } else
