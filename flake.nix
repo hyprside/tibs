@@ -15,6 +15,12 @@
     };
     aquamarine.url = "github:hyprwm/aquamarine";
     aquamarine.inputs.hyprutils.follows = "hyprutils";
+    
+    hyprwayland-scanner = {
+      url = "github:hyprwm/hyprwayland-scanner";
+      inputs.nixpkgs.follows = "nixpkgs";
+    };
+
   };
 
   outputs = inputs:
