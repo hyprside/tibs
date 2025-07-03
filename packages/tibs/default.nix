@@ -11,7 +11,7 @@
 in
   crane.buildPackage {
     src = crane.cleanCargoSource ./../..;
-    
+
     # Add extra inputs here or any other derivation settings
     buildInputs = with pkgs; [
       mesa
@@ -23,6 +23,8 @@ in
       libxkbcommon
       cairo
       hyprcursor
+      inputs.hyprutils.packages.${system}.default
+      inputs.aquamarine.packages.${system}.default
     ];
     nativeBuildInputs = with pkgs; [
       cmake
@@ -32,5 +34,4 @@ in
       curl
     ];
     SKIA_BINARIES_URL = "file://${skia-binaries}";
-    cargoExtraArgs = "--no-default-features";
   }
