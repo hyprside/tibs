@@ -10,15 +10,16 @@
         "systems": "systems"
       },
       "locked": {
-        "lastModified": 1751210423,
-        "narHash": "sha256-9SduZBZ7jQxX0U7p42Qi9ZJhVOwKTMnkuJ5glizUtBQ=",
-        "owner": "hyprwm",
+        "lastModified": 1751529107,
+        "narHash": "sha256-l2YcKksIdIu/Az9GOsI7tWgqUV6swvEzk63MyIGii/4=",
+        "owner": "coffeeispower",
         "repo": "aquamarine",
-        "rev": "dc45d00900677be882ff55cad016517e1e0e2568",
+        "rev": "3a7fd4098112de6e3ba0dde6721e42c15b07d4fc",
         "type": "github"
       },
       "original": {
-        "owner": "hyprwm",
+        "owner": "coffeeispower",
+        "ref": "tibs",
         "repo": "aquamarine",
         "type": "github"
       }
