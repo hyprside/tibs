@@ -72,6 +72,9 @@ impl<'a> Screen<'a> {
 	pub fn is_enabled(&self) -> bool {
 		unsafe { sys::rmarScreenIsEnabled(self.inner) }
 	}
+	pub fn set_enabled(&self, is_enabled: bool) {
+		unsafe { sys::rmarScreenSetEnabled(self.inner, is_enabled) }
+	}
 }
 impl super::Rustamarine {
 	pub fn screens<'a>(&'a mut self) -> Vec<Screen<'a>> {

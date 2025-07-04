@@ -37,7 +37,7 @@ SP<RustamarineScreen> createScreenFromOutput(SP<Rustamarine> rustamarine,
         output->events.needsFrame.registerListener([screen](std::any _) {
             if (screenIsInactive(&*screen))
                 return;
-
+              screen->output->scheduleFrame(Aquamarine::IOutput::AQ_SCHEDULE_NEEDS_FRAME);
         });
     screen->frameListener =
         output->events.frame.registerListener([screen](std::any _) {
@@ -271,4 +271,16 @@ const char *rmarScreenGetName(const struct RustamarineScreen *screen) {
 	if (!screen || !screen->output)
 		return "";
 	return screen->output->name.c_str();
+}
+
+
+bool rmarScreenIsEnabled(const struct RustamarineScreen *screen) {
+	return screen->output->state->state().enabled;
+}
+void rmarScreenSetEnabled(const struct RustamarineScreen *screen, bool isEnabled) {
+	if(isEnabled == screen->output->state->state().enabled) return;
+	screen->output->state->setEnabled(isEnabled);
+	screen->output->commit();
+	if(isEnabled)
+		screen->output->scheduleFrame(Aquamarine::IOutput::AQ_SCHEDULE_NEEDS_FRAME);
 }

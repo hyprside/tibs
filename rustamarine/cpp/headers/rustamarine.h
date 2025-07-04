@@ -35,6 +35,7 @@ unsigned int rmarScreenGetHeight(const struct RustamarineScreen *screen);
 float rmarScreenGetRefreshRate(const struct RustamarineScreen *screen);
 const char *rmarScreenGetName(const struct RustamarineScreen *screen);
 bool rmarScreenIsEnabled(const struct RustamarineScreen *screen);
+void rmarScreenSetEnabled(const struct RustamarineScreen *screen, bool isEnabled);
 
 bool rmarIsKeyDown(struct Rustamarine* rmar, uint32_t key);
 bool rmarIsKeyPressed(struct Rustamarine* rmar, uint32_t key);
