@@ -5,6 +5,7 @@
 #include <cstring>
 #include <hyprutils/memory/SharedPtr.hpp>
 #include <iostream>
+#include <assert.h>
 #include <poll.h>
 #include <rustamarine/internal/opengl.hpp>
 #include <rustamarine/internal/rustamarine.hpp>
@@ -45,6 +46,7 @@ void setupEventListeners(SP<Rustamarine> rmar) {
 
 						rmar->screens.push_back(createScreenFromOutput(rmar, output));
 					});
+
 }
 
 Rustamarine *rmarInitialize() {
@@ -70,7 +72,7 @@ void rmarPollEvents(struct Rustamarine *self) {
 		screen->isVBlank = false;
 	}
 
-	self->inputManager.onFrameEnd();
+
 	auto pollFDs = self->backend->getPollFDs();
 	std::vector<pollfd> fds;
 	for (const auto &pfd : pollFDs) {
@@ -112,4 +114,15 @@ void rmarFreeScreens(struct RustamarineScreens screens) {
 }
 struct Rustamarine *rmarFromScreen(struct RustamarineScreen *screen) {
 	return screen->rustamarine.get();
+}
+bool rmarIsDRM(struct Rustamarine* rmar) {
+	return rmar->backend->hasSession();
+}
+
+void rmarGoToTTY(struct Rustamarine *rmar, uint16_t tty) {
+	assert(rmar->backend->session->switchVT(tty));
+}
+bool rmarIsOnOriginalTTY(struct Rustamarine* rmar) {
+	if(!rmarIsDRM(rmar)) return true;
+	return rmar->backend->session->active;
 }

@@ -160,7 +160,7 @@ RustamarineScreen::getOrCreateRenderbuffer(SP<Aquamarine::IBuffer> buffer,
 	return rb;
 }
 void ensureOpenGLInitialized(SP<Rustamarine> rmar);
-void rmarUseScreen(struct RustamarineScreen *screen) {
+unsigned int rmarUseScreen(struct RustamarineScreen *screen) {
 	ensureOpenGLInitialized(screen->rustamarine);
 	if (!screen->currentBuffer.get()) {
 		auto newBuffer = screen->output->swapchain->next(nullptr);
@@ -171,6 +171,7 @@ void rmarUseScreen(struct RustamarineScreen *screen) {
 			panic("Failed to create render buffer")
 	}
 	screen->currentBuffer->bind();
+	return screen->currentBuffer->frameBufferId();
 }
 
 void rmarSwapBuffers(struct RustamarineScreen *self) {
@@ -198,6 +199,7 @@ void rmarSwapBuffers(struct RustamarineScreen *self) {
 	// self->output->state->addDamage(damageRegion);
 	RASSERT(self->output->commit(), "Failed to commit");
 	self->currentBuffer.reset();
+	self->rustamarine->inputManager.onFrameEnd();
 }
 bool RustamarineScreen::updateSwapchain() {
 	auto options = this->output->swapchain->currentOptions();

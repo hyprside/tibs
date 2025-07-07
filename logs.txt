@@ -1,0 +1,11 @@
+[DEBUG] Creating new Cairo ImageSurface with dimensions: 24x24
+FPS: 57.70
+FPS: 60.16
+FPS: 60.17
+FPS: 59.17
+[INFO] Logged into 1000
+FPS: 60.17
+[src/utils/tty.rs:28:3] self.number = 1
+
+Session terminated, killing shell
+ ...killed.

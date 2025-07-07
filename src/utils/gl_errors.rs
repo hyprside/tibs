@@ -23,7 +23,7 @@ pub fn check_gl_error() {
 macro_rules! gl {
     (gl::$call:ident ( $($arg:expr),* )) => {{
         let result = unsafe { gl::$call($($arg),*) };
-        $crate::gl_errors::check_gl_error();
+        $crate::gl::errors::check_gl_error();
         result
     }};
 }

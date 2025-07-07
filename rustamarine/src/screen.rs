@@ -16,10 +16,8 @@ impl<'a> Screen<'a> {
 			_e: PhantomData,
 		}
 	}
-	pub fn use_screen(&mut self) {
-		unsafe {
-			sys::rmarUseScreen(self.inner);
-		}
+	pub fn use_screen(&mut self) -> u32 {
+		unsafe { sys::rmarUseScreen(self.inner) }
 	}
 
 	pub fn is_vblank(&self) -> bool {

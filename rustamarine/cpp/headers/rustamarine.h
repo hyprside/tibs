@@ -2,6 +2,7 @@
 
 
 #ifdef __cplusplus
+#include <stdint.h>
 extern "C" {
 #endif
 #include <stdbool.h>
@@ -24,7 +25,7 @@ struct RustamarineScreens {
 struct RustamarineScreens rmarGetScreens(struct Rustamarine *self);
 void rmarFreeScreens(struct RustamarineScreens screens);
 bool rmarIsVBlank(const struct RustamarineScreen *self);
-void rmarUseScreen(struct RustamarineScreen *screen);
+unsigned int rmarUseScreen(struct RustamarineScreen *screen);
 void rmarSwapBuffers(struct RustamarineScreen *self);
 struct Rustamarine *rmarFromScreen(struct RustamarineScreen *screen);
 void rmarScreenSetOnRender(struct RustamarineScreen *screen,
@@ -57,6 +58,10 @@ double rmarGetMouseScrollY(struct Rustamarine* rmar);
 
 
 const char* rmarGetTypedCharacters(struct Rustamarine* rmar);
+
+bool rmarIsDRM(struct Rustamarine* rmar);
+void rmarGoToTTY(struct Rustamarine* rmar, uint16_t tty);
+bool rmarIsOnOriginalTTY(struct Rustamarine* rmar);
 #ifdef __cplusplus
 }
 #endif
