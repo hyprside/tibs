@@ -15,44 +15,44 @@ using namespace Aquamarine;
 Mouse::Mouse(SP<Aquamarine::IPointer> pointer, InputManager *inputManager)
 		: pointer(pointer), inputManager(inputManager) {
 	std::println("New mouse: {}", pointer->getName());
+}
+void Mouse::registerListeners() {
+	auto inputManager = this->inputManager;
 	// Listen for relative mouse movement
 	onRelativeMoveListenerListener =
-			pointer->events.move.registerListener([this](std::any event) {
+			pointer->events.move.registerListener([inputManager](std::any event) {
 				auto relEvent = std::any_cast<Aquamarine::IPointer::SMoveEvent>(event);
-				this->inputManager->mouseDeltaX += relEvent.delta.x;
-				this->inputManager->mouseDeltaY += relEvent.delta.y;
-				this->inputManager->mouseAbsoluteX += relEvent.delta.x;
-				this->inputManager->mouseAbsoluteY += relEvent.delta.y;
-				if (this->inputManager->rmar->screens.empty())
-					return;
-				auto screen = this->inputManager->rmar->screens[0];
+				inputManager->mouseDeltaX += relEvent.delta.x;
+				inputManager->mouseDeltaY += relEvent.delta.y;
+				inputManager->mouseAbsoluteX += relEvent.delta.x;
+				inputManager->mouseAbsoluteY += relEvent.delta.y;
 			});
 	// Listen for absolute mouse movement (warp)
 	onWarpListener =
-			pointer->events.warp.registerListener([this](std::any event) {
+			pointer->events.warp.registerListener([inputManager](std::any event) {
 				auto warpEvent = std::any_cast<Aquamarine::IPointer::SWarpEvent>(event);
-				if (!this->inputManager->rmar->screens.empty()) {
-					auto screen = this->inputManager->rmar->screens[0];
+				if (!inputManager->rmar->screens.empty()) {
+					auto screen = inputManager->rmar->screens[0];
 					auto width = static_cast<double>(rmarScreenGetWidth(screen.get()));
 					auto height = static_cast<double>(rmarScreenGetHeight(screen.get()));
-					auto oldAbsolutePositionX = this->inputManager->mouseAbsoluteX;
-					auto oldAbsolutePositionY = this->inputManager->mouseAbsoluteY;
-					this->inputManager->mouseAbsoluteX = warpEvent.absolute.x * width;
-					this->inputManager->mouseAbsoluteY = warpEvent.absolute.y * height;
-					this->inputManager->mouseDeltaX +=
-							warpEvent.absolute.x - this->inputManager->mouseAbsoluteX;
-					this->inputManager->mouseDeltaY +=
-							warpEvent.absolute.y - this->inputManager->mouseAbsoluteY;
+					auto oldAbsolutePositionX = inputManager->mouseAbsoluteX;
+					auto oldAbsolutePositionY = inputManager->mouseAbsoluteY;
+					inputManager->mouseAbsoluteX = warpEvent.absolute.x * width;
+					inputManager->mouseAbsoluteY = warpEvent.absolute.y * height;
+					inputManager->mouseDeltaX +=
+							warpEvent.absolute.x - inputManager->mouseAbsoluteX;
+					inputManager->mouseDeltaY +=
+							warpEvent.absolute.y - inputManager->mouseAbsoluteY;
 				}
 			});
-	onScrollListener = pointer->events.axis.registerListener([this](std::any d) {
+	onScrollListener = pointer->events.axis.registerListener([inputManager](std::any d) {
     auto scrollEvent = std::any_cast<Aquamarine::IPointer::SAxisEvent>(d);
     switch (scrollEvent.axis) {
 	   	case IPointer::AQ_POINTER_AXIS_VERTICAL:
-					this->inputManager->mouseScrollY += scrollEvent.delta;
+					inputManager->mouseScrollY += scrollEvent.delta;
 					break;
 	    case IPointer::AQ_POINTER_AXIS_HORIZONTAL:
-					this->inputManager->mouseScrollX += scrollEvent.delta;
+					inputManager->mouseScrollX += scrollEvent.delta;
 					break;
     }
 	});
@@ -73,7 +73,6 @@ Mouse::Mouse(SP<Aquamarine::IPointer> pointer, InputManager *inputManager)
 											});
 			});
 }
-
 // Implementation of Keyboard
 Keyboard::Keyboard(SP<Aquamarine::IKeyboard> keyboard,
 									 InputManager *inputManager)
@@ -84,6 +83,9 @@ Keyboard::Keyboard(SP<Aquamarine::IKeyboard> keyboard,
 		fprintf(stderr, "Failed to initialize XKB for keyboard\n");
 		return;
 	}
+
+}
+void Keyboard::registerListeners() {
 
 	// Listen for key updates
 	this->onKeyUpdateListener =
@@ -128,7 +130,6 @@ Keyboard::Keyboard(SP<Aquamarine::IKeyboard> keyboard,
 				});
 			});
 }
-
 Keyboard::~Keyboard() { cleanupXkb(); }
 
 bool Keyboard::initXkb() {
@@ -261,7 +262,6 @@ void Keyboard::handleKeyEvent(xkb_keysym_t keysym) {
 	}
 	buffer[bufferLen] = 0;
 	inputManager->currentFrameUtf8Input = inputManager->currentFrameUtf8Input + buffer;
-	std::println("{}", inputManager->currentFrameUtf8Input);
 }
 
 // Implementation of InputManager
@@ -270,16 +270,18 @@ InputManager::InputManager(SP<Rustamarine> rmar) : rmar(rmar) {
 	onNewKeyboardListener = rmar->backend->events.newKeyboard.registerListener(
 			[rmar](std::any event) {
 				auto keyboard = std::any_cast<SP<Aquamarine::IKeyboard>>(event);
-				rmar->inputManager.keyboards.emplace_back(
-						Hyprutils::Memory::makeShared<Keyboard>(keyboard,
-																										&rmar->inputManager));
+				auto kb = Hyprutils::Memory::makeShared<Keyboard>(keyboard,
+																								&rmar->inputManager);
+				kb->registerListeners();
+				rmar->inputManager.keyboards.emplace_back(kb);
 			});
 	// Listen for new mice
 	onNewMouseListener =
 			rmar->backend->events.newPointer.registerListener([rmar](std::any event) {
 				auto pointer = std::any_cast<SP<Aquamarine::IPointer>>(event);
-				rmar->inputManager.mouses.emplace_back(
-						Hyprutils::Memory::makeShared<Mouse>(pointer, &rmar->inputManager));
+				auto mouse = Hyprutils::Memory::makeShared<Mouse>(pointer, &rmar->inputManager);
+				mouse->registerListeners();
+				rmar->inputManager.mouses.emplace_back(mouse);
 			});
 }
 
@@ -363,7 +365,7 @@ bool rmarIsKeyDown(Rustamarine *rmar, uint32_t key) {
 	for (auto &kb : rmar->inputManager.keyboards) {
 	  if(!kb->keystates.contains(key)) continue;
 		auto it = kb->keystates[key];
-		if (!it.down) return true;
+		if (it.down) return true;
 	}
 	return false;
 }

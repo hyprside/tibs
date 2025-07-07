@@ -37,6 +37,7 @@ namespace rustamarine {
 		SP<Aquamarine::IPointer> pointer;
 		CHyprSignalListener onRelativeMoveListenerListener, onWarpListener, onScrollListener, onButtonChangeListener, onDisconnectListener;
 		std::map<uint32_t, MouseButtonState> mouseButtonStates;
+		void registerListeners();
 		friend InputManager;
 
 	};
@@ -46,6 +47,7 @@ namespace rustamarine {
 		explicit Keyboard(SP<Aquamarine::IKeyboard> keyboard, InputManager* inputManager);
 		~Keyboard();
 
+		void registerListeners();
 		// Initialize xkbcommon for this keyboard
 		bool initXkb();
 		// Clean up xkbcommon resources

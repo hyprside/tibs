@@ -60,7 +60,11 @@
 //! }
 //! ```
 
-use std::sync::mpsc::{self, Receiver, Sender};
+use std::{
+	collections::HashMap,
+	ops::DerefMut,
+	sync::mpsc::{self, Receiver, Sender},
+};
 
 pub trait Animation {
 	fn update(&mut self, delta: f32) -> Vec<(String, f32)>;
@@ -111,7 +115,11 @@ where
 			self.elapsed = self.duration;
 		}
 		let progress = (self.elapsed / self.duration).min(1.0);
-		let eased_progress = (self.easing)(progress);
+		let eased_progress = if delta.is_sign_negative() {
+			1.0 - (self.easing)(1.0 - progress)
+		} else {
+			(self.easing)(progress)
+		};
 		vec![(self.id.clone(), eased_progress)]
 	}
 
@@ -222,17 +230,34 @@ impl DelayAnimation {
 
 impl Animation for DelayAnimation {
 	fn update(&mut self, delta: f32) -> Vec<(String, f32)> {
-		if self.elapsed < self.delay {
-			self.elapsed += delta;
-			if self.elapsed <= self.delay {
-				return vec![];
+		if delta.is_sign_positive() {
+			if self.elapsed < self.delay {
+				self.elapsed += delta;
+				if self.elapsed <= self.delay {
+					return vec![];
+				}
+				// Compensa o tempo que passou além do delay.
+				let adjusted_delta = self.elapsed - self.delay;
+				self.elapsed = self.delay;
+				return self.animation.update(adjusted_delta);
 			}
-			// Compensa o tempo que passou além do delay.
-			let adjusted_delta = self.elapsed - self.delay;
-			self.elapsed = self.delay;
-			return self.animation.update(adjusted_delta);
+			self.animation.update(delta)
+		} else {
+			if self.animation.has_started() {
+				let updated = self.animation.update(delta);
+				// Após a animação "andar para trás", também recuamos o delay
+				if self.elapsed > 0.0 {
+					self.elapsed = (self.elapsed + delta).max(0.0);
+				}
+				updated
+			} else {
+				// Ainda não começou, então só recua o delay
+				if self.elapsed > 0.0 {
+					self.elapsed = (self.elapsed + delta).max(0.0);
+				}
+				vec![]
+			}
 		}
-		self.animation.update(delta)
 	}
 
 	fn is_finished(&self) -> bool {
@@ -564,6 +589,30 @@ pub mod colors {
 		let a = u8::from_str_radix(&rgb[7..9], 16).expect("Invalid alpha component") as f32 / 255.0;
 		(r, g, b, a)
 	}
+	pub const fn hsl_to_rgb(h: f32, s: f32, l: f32) -> (u8, u8, u8) {
+		let s = s / 100.;
+		let l = l / 100.;
+		let c = (1.0 - (2.0 * l - 1.0).abs()) * s;
+		let h_prime = h / 60.0;
+		let x = c * (1.0 - ((h_prime % 2.0) - 1.0).abs());
+
+		let (r1, g1, b1) = match h_prime as u32 {
+			0 => (c, x, 0.0),
+			1 => (x, c, 0.0),
+			2 => (0.0, c, x),
+			3 => (0.0, x, c),
+			4 => (x, 0.0, c),
+			5 | 6 => (c, 0.0, x),
+			_ => (0.0, 0.0, 0.0),
+		};
+
+		let m = l - c / 2.0;
+		let r = ((r1 + m) * 255.0) as u8;
+		let g = ((g1 + m) * 255.0) as u8;
+		let b = ((b1 + m) * 255.0) as u8;
+
+		(r, g, b)
+	}
 }
 
 #[cfg(test)]
@@ -673,6 +722,57 @@ macro_rules! seq {
     };
 }
 
+pub struct AnimationStateTracker {
+	animation: Box<dyn Animation>,
+	animations_state: HashMap<String, f32>,
+	previous_state: HashMap<String, f32>,
+}
+
+impl AnimationStateTracker {
+	pub fn new(animation: impl Animation + 'static) -> Self {
+		Self {
+			animation: Box::new(animation),
+			animations_state: HashMap::new(),
+			previous_state: HashMap::new(),
+		}
+	}
+
+	pub fn update(&mut self, delta: f32) {
+		// Guarda o estado anterior antes de atualizar
+		self.previous_state = self.animations_state.clone();
+		self.animations_state.extend(self.animation.update(delta));
+	}
+
+	pub fn get_animation_progress(&self, id: &str) -> f32 {
+		self.animations_state.get(id).copied().unwrap_or(0.0)
+	}
+
+	/// Retorna `true` **apenas durante 1 frame** após a animação atingir 1.0.
+	pub fn has_finished_this_frame(&self, id: &str) -> bool {
+		let prev = self.previous_state.get(id).copied().unwrap_or(0.0);
+		let curr = self.animations_state.get(id).copied().unwrap_or(0.0);
+		prev < 1.0 && curr >= 1.0
+	}
+}
+
+impl std::ops::Deref for AnimationStateTracker {
+	type Target = dyn Animation;
+
+	fn deref(&self) -> &Self::Target {
+		self.animation.as_ref()
+	}
+}
+
+impl std::ops::DerefMut for AnimationStateTracker {
+	fn deref_mut(&mut self) -> &mut Self::Target {
+		self.animation.as_mut()
+	}
+}
+impl<T: Animation + 'static> From<T> for AnimationStateTracker {
+	fn from(animation: T) -> Self {
+		Self::new(animation)
+	}
+}
 #[cfg(test)]
 mod macro_tests {
 	use super::easing::*;

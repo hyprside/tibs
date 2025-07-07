@@ -1,8 +1,7 @@
-use crate::{TibsClayScope, FONTS};
+use crate::{skia::clay_renderer::create_measure_text_function, TibsClayScope, FONTS};
 use clay_layout::{
 	fixed, grow,
 	layout::{Alignment, Padding},
-	renderers::skia::create_measure_text_function,
 	text::TextConfig,
 	Clay, Declaration,
 };
@@ -16,6 +15,7 @@ pub struct Textbox {
 	censored_buffer: String,
 	id: String,
 	pub hide_input: bool,
+	pub disabled: bool,
 }
 
 impl Textbox {
@@ -27,6 +27,7 @@ impl Textbox {
 			censored_buffer: String::new(),
 			id: id.into(),
 			hide_input,
+			disabled: false,
 		}
 	}
 	fn chars_count(s: &str) -> usize {
@@ -127,7 +128,7 @@ impl Textbox {
 		let mut config = TextConfig::new();
 		config
 			.color((0xFF, 0xFF, 0xFF).into())
-			.font_size(14)
+			.font_size(16)
 			.alignment(clay_layout::text::TextAlignment::Left);
 		return config;
 	}
@@ -135,16 +136,22 @@ impl Textbox {
 	where
 		'clay: 'render,
 	{
-		if !self.focused {
+		if !self.focused || self.disabled {
 			return;
 		}
 		self.handle_mouse_clicks(rmar, c);
 		let chars_count = Self::chars_count(&self.buffer);
 		if rmar.is_key_pressed(keys::KEY_BackSpace) {
 			if self.cursor > 0 {
-				let cursor_byte_index = Self::char_index_to_byte_index(&self.buffer, self.cursor - 1);
-				self.cursor -= 1;
-				self.buffer.remove(cursor_byte_index);
+				if self.cursor >= chars_count {
+					let cursor_byte_index = Self::char_index_to_byte_index(&self.buffer, chars_count - 1);
+					self.cursor = chars_count - 1;
+					self.buffer.remove(cursor_byte_index);
+				} else {
+					let cursor_byte_index = Self::char_index_to_byte_index(&self.buffer, self.cursor - 1);
+					self.cursor -= 1;
+					self.buffer.remove(cursor_byte_index);
+				}
 			}
 			self.scroll_cursor_into_view(c);
 		} else if rmar.is_key_pressed(keys::KEY_Left) {
@@ -185,23 +192,26 @@ impl Textbox {
 	where
 		'clay: 'render,
 	{
-		c.with(
-			Declaration::new()
-				.layout()
-				.width(fixed!(300.0))
-				.height(fixed!(50.0))
-				.padding(Padding::all(15))
-				.child_alignment(Alignment::new(
-					clay_layout::layout::LayoutAlignmentX::Left,
-					clay_layout::layout::LayoutAlignmentY::Center,
-				))
-				.end()
-				.clip(true, false, c.scroll_offset())
-				.id(c.id(&self.id))
-				.background_color((0x0E, 0x1A, 0x26, 0x30).into())
-				.corner_radius()
-				.all(10.0)
-				.end(),
+		c.with_styling(
+			|c| {
+				let mut d = Declaration::new();
+				d.layout()
+					.width(fixed!(300.0))
+					.height(fixed!(50.0))
+					.padding(Padding::all(15))
+					.child_alignment(Alignment::new(
+						clay_layout::layout::LayoutAlignmentX::Left,
+						clay_layout::layout::LayoutAlignmentY::Center,
+					))
+					.end()
+					.clip(true, false, c.scroll_offset())
+					.id(c.id(&self.id))
+					.background_color((0x0E, 0x1A, 0x26, 0x30).into())
+					.corner_radius()
+					.all(10.0)
+					.end();
+				d
+			},
 			|c| {
 				let buffer_to_render = if self.hide_input {
 					&self.censored_buffer
@@ -211,16 +221,35 @@ impl Textbox {
 				let cursor_byte_index = Self::char_index_to_byte_index(buffer_to_render, self.cursor);
 				c.text(
 					&buffer_to_render[..cursor_byte_index],
-					Self::text_config().end(),
+					Self::text_config()
+						.color(
+							if self.disabled {
+								(0xFF, 0xFF, 0xFF, 0x50)
+							} else {
+								(0xFF, 0xFF, 0xFF, 0xFF)
+							}
+							.into(),
+						)
+						.end(),
 				);
 				if self.focused {
 					c.with(
 						Declaration::new()
 							.layout()
-							.width(fixed!(1.))
+							.width(fixed!(0.))
 							.height(grow!())
 							.end()
-							.background_color((0xff, 0xff, 0xff).into()),
+							.border()
+							.left(1)
+							.color(
+								if self.disabled {
+									(0xFF, 0xFF, 0xFF, 0x60)
+								} else {
+									(0xFF, 0xFF, 0xFF, 0xFF)
+								}
+								.into(),
+							)
+							.end(),
 						|_| {},
 					);
 				}

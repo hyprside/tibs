@@ -15,7 +15,7 @@
     };
     aquamarine.url = "github:coffeeispower/aquamarine/tibs";
     aquamarine.inputs.hyprutils.follows = "hyprutils";
-
+    aquamarine.inputs.nixpkgs.follows = "nixpkgs";
     hyprwayland-scanner = {
       url = "github:hyprwm/hyprwayland-scanner";
       inputs.nixpkgs.follows = "nixpkgs";
