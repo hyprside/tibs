@@ -7,7 +7,7 @@ use drm::control::{
 };
 pub use drm::Device;
 use drm::VblankWaitFlags;
-use gbm::{AsRaw, BufferObjectFlags};
+use gbm::{AsRaw, BufferObject, BufferObjectFlags};
 use glutin::api::egl;
 use glutin::config::ConfigTemplateBuilder;
 use glutin::context::ContextAttributesBuilder;
@@ -24,7 +24,6 @@ use std::os::fd::{AsFd, AsRawFd};
 use std::ptr::NonNull;
 use std::sync::atomic::{AtomicBool, Ordering};
 use std::sync::LazyLock;
-use std::thread::sleep_ms;
 use std::time::Duration;
 use std::u64;
 
@@ -235,6 +234,7 @@ pub struct DrmContext {
     plane: plane::Handle,
     plane_properties: HashMap<String, property::Info>,
     first_frame: bool,
+    previous_buffer: Option<BufferObject<()>>
 }
 
 fn find_egl_config(egl_display: &egl::display::Display) -> egl::config::Config {
@@ -335,6 +335,7 @@ impl DrmContext {
             libc::signal(SIGUSR2, handle_acquire as usize);
         }
         let mut context = DrmContext {
+        		previous_buffer: None,
             display: egl_display,
             gbm_surface,
             surface,
@@ -361,8 +362,25 @@ impl DrmContext {
 
     fn _swap_buffers(&mut self) -> color_eyre::Result<()> {
         unsafe {
+            gl::Flush();
             self.surface.swap_buffers(&self.context)?;
+            let egl = self.display.egl();
+            unsafe {
+                egl.SwapInterval(egl.GetCurrentDisplay(), 1);
+            }
+            // Fence EGL -> DRM
+            const EGL_SYNC_FENCE_KHR: u32 = 0x30F9;
+            let sync = unsafe {
+                egl.CreateSyncKHR(
+                    egl.GetCurrentDisplay(),
+                    EGL_SYNC_FENCE_KHR,
+                    std::ptr::null(),
+                )
+            };
+            let fence_fd = unsafe { egl.DupNativeFenceFDANDROID(egl.GetCurrentDisplay(), sync) };
             let frontbuffer = self.gbm_surface.lock_front_buffer()?;
+            drop(self.previous_buffer.take());
+
             // if !self.first_frame {
             //     self.gbm_device.wait_vblank(
             //         drm::VblankWaitTarget::Relative(1),
@@ -381,101 +399,114 @@ impl DrmContext {
                 .get_properties(self.crtc.handle())?
                 .as_hashmap(&self.gbm_device)?;
             let plane = self.plane;
+            let plane_props = self
+                .gbm_device
+                .get_properties(plane)?
+                .as_hashmap(&self.gbm_device)?;
             let mut atomic_req = AtomicModeReq::new();
 
-            atomic_req.add_property(
-                self.connector.handle(),
-                con_props["CRTC_ID"].handle(),
-                property::Value::CRTC(Some(self.crtc.handle())),
-            );
+            if self.first_frame {
+                atomic_req.add_property(
+                    self.connector.handle(),
+                    con_props["CRTC_ID"].handle(),
+                    property::Value::CRTC(Some(self.crtc.handle())),
+                );
+                let blob = self
+                    .gbm_device
+                    .create_property_blob(&self.mode)
+                    .expect("Failed to create blob");
+                atomic_req.add_property(self.crtc.handle(), crtc_props["MODE_ID"].handle(), blob);
+                atomic_req.add_property(
+                    self.crtc.handle(),
+                    crtc_props["ACTIVE"].handle(),
+                    property::Value::Boolean(true),
+                );
 
-            let blob = self
-                .gbm_device
-                .create_property_blob(&self.mode)
-                .expect("Failed to create blob");
-            atomic_req.add_property(self.crtc.handle(), crtc_props["MODE_ID"].handle(), blob);
-            atomic_req.add_property(
-                self.crtc.handle(),
-                crtc_props["ACTIVE"].handle(),
-                property::Value::Boolean(true),
-            );
+                atomic_req.add_property(
+                    plane,
+                    self.plane_properties["CRTC_ID"].handle(),
+                    property::Value::CRTC(Some(self.crtc.handle())),
+                );
 
+                atomic_req.add_property(
+                    plane,
+                    self.plane_properties["SRC_X"].handle(),
+                    property::Value::UnsignedRange(0),
+                );
+                atomic_req.add_property(
+                    plane,
+                    self.plane_properties["SRC_Y"].handle(),
+                    property::Value::UnsignedRange(0),
+                );
+                atomic_req.add_property(
+                    plane,
+                    self.plane_properties["SRC_W"].handle(),
+                    property::Value::UnsignedRange((self.mode.size().0 as u64) << 16),
+                );
+                atomic_req.add_property(
+                    plane,
+                    self.plane_properties["SRC_H"].handle(),
+                    property::Value::UnsignedRange((self.mode.size().1 as u64) << 16),
+                );
+                atomic_req.add_property(
+                    plane,
+                    self.plane_properties["CRTC_X"].handle(),
+                    property::Value::SignedRange(0),
+                );
+                atomic_req.add_property(
+                    plane,
+                    self.plane_properties["CRTC_Y"].handle(),
+                    property::Value::SignedRange(0),
+                );
+                atomic_req.add_property(
+                    plane,
+                    self.plane_properties["CRTC_W"].handle(),
+                    property::Value::UnsignedRange(self.mode.size().0 as u64),
+                );
+                atomic_req.add_property(
+                    plane,
+                    self.plane_properties["CRTC_H"].handle(),
+                    property::Value::UnsignedRange(self.mode.size().1 as u64),
+                );
+            }
             atomic_req.add_property(
                 plane,
                 self.plane_properties["FB_ID"].handle(),
                 property::Value::Framebuffer(Some(fb)),
             );
-            atomic_req.add_property(
-                plane,
-                self.plane_properties["CRTC_ID"].handle(),
-                property::Value::CRTC(Some(self.crtc.handle())),
-            );
-            atomic_req.add_property(
-                plane,
-                self.plane_properties["SRC_X"].handle(),
-                property::Value::UnsignedRange(0),
-            );
-            atomic_req.add_property(
-                plane,
-                self.plane_properties["SRC_Y"].handle(),
-                property::Value::UnsignedRange(0),
-            );
-            atomic_req.add_property(
-                plane,
-                self.plane_properties["SRC_W"].handle(),
-                property::Value::UnsignedRange((self.mode.size().0 as u64) << 16),
-            );
-            atomic_req.add_property(
-                plane,
-                self.plane_properties["SRC_H"].handle(),
-                property::Value::UnsignedRange((self.mode.size().1 as u64) << 16),
-            );
-            atomic_req.add_property(
-                plane,
-                self.plane_properties["CRTC_X"].handle(),
-                property::Value::SignedRange(0),
-            );
-            atomic_req.add_property(
-                plane,
-                self.plane_properties["CRTC_Y"].handle(),
-                property::Value::SignedRange(0),
-            );
-            atomic_req.add_property(
-                plane,
-                self.plane_properties["CRTC_W"].handle(),
-                property::Value::UnsignedRange(self.mode.size().0 as u64),
-            );
-            atomic_req.add_property(
-                plane,
-                self.plane_properties["CRTC_H"].handle(),
-                property::Value::UnsignedRange(self.mode.size().1 as u64),
-            );
-            // Use atomic commit with PAGE_FLIP_EVENT
+            let prop_in_fence_fd_on_crtc = crtc_props.get("IN_FENCE_FD").map(|p| p.handle());
+            let prop_in_fence_fd_on_plane = plane_props.get("IN_FENCE_FD").map(|p| p.handle());
+            if let Some(h) = prop_in_fence_fd_on_crtc {
+                atomic_req.add_property(
+                    self.crtc.handle(),
+                    h,
+                    property::Value::SignedRange(fence_fd as i64),
+                );
+            } else if let Some(h) = prop_in_fence_fd_on_plane {
+                atomic_req.add_property(plane, h, property::Value::SignedRange(fence_fd as i64));
+            }
+
+            let mut flags = AtomicCommitFlags::PAGE_FLIP_EVENT;
+            if self.first_frame {
+                flags |= AtomicCommitFlags::ALLOW_MODESET;
+            } else {
+                flags |= AtomicCommitFlags::NONBLOCK;
+            }
+
+            // envia o commit
             self.gbm_device
-                .atomic_commit(
-                    AtomicCommitFlags::PAGE_FLIP_EVENT,
-                    atomic_req,
-                )
+                .atomic_commit(flags, atomic_req)
                 .expect("Failed to commit atomic request");
 
-            // // Now wait for the event from drm fd
-            // let drm_fd = self.gbm_device.as_fd().as_raw_fd();
-            // let mut fds = [pollfd {
-            //   fd: drm_fd, events: libc::POLLIN,
-            //   revents: 0
-            // }];
-            // libc::poll(fds.as_mut_ptr(), fds.len() as u64, -1); // Block until event
-
-            // FIXME: Try to fix the stupid tearing, i'm already wanting to kill myself because I already spent
-            // +4 hours trying to solve tearing I can't do this anymore
             'l: loop {
-              for event in self.gbm_device.receive_events()? {
-                  if let control::Event::PageFlip(_) = event {
-                      break 'l; // Page flip event received
-                  }
-              }
+                for event in self.gbm_device.receive_events()? {
+                    if let control::Event::PageFlip(_) = event {
+                        break 'l; // Page flip event received
+                    }
+                }
             }
             self.first_frame = false;
+            self.previous_buffer = Some(frontbuffer);
             Ok(())
         }
     }
