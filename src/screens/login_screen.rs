@@ -30,7 +30,7 @@ enum KnownDEs {
 	KDE,
 	GNOME,
 	Hyprland,
-	HyprDE,
+	ArdosDE,
 	Unknown,
 }
 impl KnownDEs {
@@ -41,8 +41,8 @@ impl KnownDEs {
 			Self::GNOME
 		} else if de.name() == "Hyprland" {
 			Self::Hyprland
-		} else if de.name() == "HyprDE" {
-			Self::HyprDE
+		} else if de.name() == "Ardos DE" {
+			Self::ArdosDE
 		} else {
 			Self::Unknown
 		}
@@ -101,7 +101,7 @@ impl LoginScreen {
 			KnownDEs::Hyprland,
 			assets.load_owned("icons.hyprland").unwrap(),
 		);
-		de_icons.insert(KnownDEs::HyprDE, assets.load_owned("icons.hyprde").unwrap());
+		de_icons.insert(KnownDEs::ArdosDE, assets.load_owned("icons.ardosde").unwrap());
 		de_icons.insert(
 			KnownDEs::Unknown,
 			assets.load_owned("icons.unknown").unwrap(),
@@ -710,7 +710,7 @@ fn desktop_environments_popup<'clay: 'render, 'render>(
 										KnownDEs::KDE => "KDE Plasma",
 										KnownDEs::GNOME => "GNOME",
 										KnownDEs::Hyprland => "Hyprland",
-										KnownDEs::HyprDE => "HyprDE",
+										KnownDEs::ArdosDE => "Ardos DE",
 										KnownDEs::Unknown => frame_pool
 											.alloc(format!("{} (Unknown)", de.name()))
 											.as_str(),
