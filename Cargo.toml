@@ -1,0 +1,17 @@
+[package]
+name = "tibs"
+version = "0.1.0-alpha"
+edition = "2024"
+
+[dependencies]
+anyhow = "1.0"
+glow = "0.14"
+tab-app-framework = { version = "0.1.0-alpha", git = "https://github.com/ardos-os/shift" }
+tracing = "0.1"
+tracing-subscriber = { version = "0.3", features = ["env-filter", "fmt"] }
+skia-safe = { version = "0.91.0", features = ["gl"] }
+
+[profile.release]
+lto = true
+codegen-units = 1
+strip = true
