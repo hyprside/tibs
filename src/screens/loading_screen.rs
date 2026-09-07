@@ -12,17 +12,15 @@ use clay_layout::{
 };
 
 use crate::{
-    all,
     animation::{
-        self,
         colors::interpolate_color,
-        easing::{ease_out_elastic, ease_out_quad, ease_out_quint},
+        easing::{ease_out_elastic, ease_out_quad},
         Animation, BasicAnimation, ParallelAnimation, ProgressBarAnimation,
     },
-    progress_watcher::ProgressData,
     skia::asset_loaders::SkiaImageAsset,
     TibsClayScope,
 };
+use tibs_service_definitions::InitProgress;
 pub struct LoadingScreen {
     loading_animation: ParallelAnimation,
     end_progress: BasicAnimation,
@@ -59,9 +57,9 @@ impl LoadingScreen {
             logo,
         }
     }
-    pub fn update(&mut self, progress: &ProgressData, delta_time: f32) {
+    pub fn update(&mut self, progress: &InitProgress, delta_time: f32) {
         self.progress_bar_sender
-            .send(progress.get_percentage())
+            .send(progress.percentage())
             .unwrap();
         self.animations_state
             .extend(self.loading_animation.update(delta_time));
@@ -71,7 +69,7 @@ impl LoadingScreen {
 
     pub fn render<'clay, 'render>(
         &'render self,
-        progress: &'render ProgressData,
+        progress: &'render InitProgress,
         c: &mut TibsClayScope<'clay, 'render>,
     ) where
         'clay: 'render,
@@ -244,7 +242,7 @@ impl LoadingScreen {
     }
     fn progress_bar<'clay, 'render>(
         &'render self,
-        progress: &ProgressData,
+        progress: &InitProgress,
         end_progress_animation: f32,
         leading_icon: Option<&'render skia_safe::Image>,
         c: &mut TibsClayScope<'clay, 'render>,

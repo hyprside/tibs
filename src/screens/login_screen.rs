@@ -1,22 +1,21 @@
 use std::collections::HashMap;
-use std::sync::Arc;
 
 use super::{LoginManager, LoginState};
 use crate::animation::colors::hsl_to_rgb;
 use crate::frame_pool::FrameAllocator;
-use crate::session_manager::{self, DesktopEnvironmentFile, SessionManager, SessionStatus};
 use crate::textbox::Textbox;
+use crate::TibsClayScope;
 use crate::{custom_elements::CustomElements, skia::asset_loaders::SkiaImageAsset};
-use crate::{format_id, frame_alloc_format, TibsClayScope};
 use assets_manager::AssetCache;
 use clay_layout::fit;
-use clay_layout::text::TextElementConfig;
 use skia_safe::Image;
 use xkbcommon::xkb::Keysym;
 
 use crate::input::{Input, MouseButton};
-use uzers::os::unix::UserExt;
-use uzers::{all_users, User};
+use tibs_service_definitions::{
+    DesktopSession, DesktopSessionRepositoryService, SessionManager, SessionStatus, UserAccount,
+    UserId, UserRepositoryService,
+};
 
 use clay_layout::{
     elements::{FloatingAttachPointType, FloatingAttachToElement},
@@ -35,14 +34,14 @@ enum KnownDEs {
     Unknown,
 }
 impl KnownDEs {
-    pub fn from_de(de: &DesktopEnvironmentFile) -> Self {
-        if de.name().starts_with("Plasma (") {
+    pub fn from_de(de: &DesktopSession) -> Self {
+        if de.name.starts_with("Plasma (") {
             Self::KDE
-        } else if de.name().starts_with("GNOME Shell") {
+        } else if de.name.starts_with("GNOME Shell") {
             Self::GNOME
-        } else if de.name() == "Hyprland" {
+        } else if de.name == "Hyprland" {
             Self::Hyprland
-        } else if de.name() == "Ardos DE" {
+        } else if de.name == "Ardos DE" {
             Self::ArdosDE
         } else {
             Self::Unknown
@@ -52,27 +51,23 @@ impl KnownDEs {
 // --------- Login Screen
 
 pub struct LoginScreen {
-    user_list: Vec<User>,
-    selected_user: u32,
+    user_list: Vec<UserAccount>,
+    selected_user: UserId,
     selected_username: String,
     login_icon: Image,
     eye_icon: Image,
     eye_off_icon: Image,
-    avatars: HashMap<u32, Image>,
+    avatars: HashMap<UserId, Image>,
+    desktop_sessions: Vec<DesktopSession>,
     password_input: Textbox,
     de_icons: HashMap<KnownDEs, SkiaImageAsset>,
     is_desktop_environment_popup_open: bool,
-    selected_de: Option<DesktopEnvironmentFile>,
+    selected_de: Option<DesktopSession>,
     session_open_error: Option<String>,
 }
 
-fn is_user_uid(uid: u32) -> bool {
-    return uid >= 1000 && uid < 65534;
-}
-
-fn load_avatar(u: &User) -> Option<Image> {
-    let face_file_path = u.home_dir().join(".face");
-    let face_image_data = skia_safe::Data::from_filename(face_file_path)?;
+fn load_avatar(user: &UserAccount) -> Option<Image> {
+    let face_image_data = skia_safe::Data::from_filename(user.avatar_path.as_ref()?)?;
     let face_image = Image::from_encoded(face_image_data)?;
     return Some(face_image);
 }
@@ -84,7 +79,16 @@ impl LoginScreen {
     pub fn username(&self) -> &str {
         &self.selected_username
     }
-    pub fn new(assets: &AssetCache) -> Self {
+
+    fn selected_user_account(&self) -> Option<&UserAccount> {
+        self.user_list.iter().find(|u| u.id == self.selected_user)
+    }
+
+    pub fn new(
+        assets: &AssetCache,
+        user_repository: &dyn UserRepositoryService,
+        desktop_session_repository: &dyn DesktopSessionRepositoryService,
+    ) -> Self {
         let SkiaImageAsset(login_icon) = assets
             .load_owned("icons.login")
             .expect("Failed to load icons.login");
@@ -110,20 +114,22 @@ impl LoginScreen {
             KnownDEs::Unknown,
             assets.load_owned("icons.unknown").unwrap(),
         );
-        let user_list = unsafe { all_users() }
-            .filter(|u| is_user_uid(u.uid()) && !u.shell().ends_with("nologin"))
-            .collect::<Vec<User>>();
+        let user_list = user_repository.list_users().expect("Failed to load users");
+        let desktop_sessions = desktop_session_repository
+            .list_sessions()
+            .expect("Failed to load desktop sessions");
 
-        let selected_user = user_list[0].uid();
-        let selected_username = user_list[0].name().to_str().unwrap().to_string();
+        let selected_user = user_list[0].id.clone();
+        let selected_username = user_list[0].username.clone();
         Self {
             avatars: user_list
                 .iter()
-                .filter_map(|u| Some((u.uid(), load_avatar(u)?)))
+                .filter_map(|u| Some((u.id.clone(), load_avatar(u)?)))
                 .collect(),
             user_list,
             selected_user,
             selected_username,
+            desktop_sessions,
             login_icon,
             password_input: Textbox::new("login-input", true),
             eye_icon,
@@ -141,7 +147,7 @@ impl LoginScreen {
         c: &mut clay_layout::Clay,
         input: &dyn Input,
         login_manager: &mut LoginManager,
-        session_manager: &SessionManager,
+        session_manager: &dyn SessionManager,
     ) where
         'clay: 'render,
     {
@@ -150,14 +156,20 @@ impl LoginScreen {
         {
             self.is_desktop_environment_popup_open = false;
         }
-        if let Some(selected) = self
-            .user_list
-            .iter()
-            .find(|u| u.uid() == self.selected_user)
-        {
-            let n = selected.name().to_str().unwrap();
+        if let Some(selected) = self.user_list.iter().find(|u| u.id == self.selected_user) {
+            let n = selected.username.as_str();
             if self.selected_username != n {
                 self.selected_username = n.to_string();
+            }
+        }
+        if let Some(user) = self.selected_user_account() {
+            login_manager.begin_authentication(user.clone());
+        }
+        for user in self.user_list.clone() {
+            let id = c.id(format!("user_item-{}", user.username).as_str());
+            if c.pointer_over(id) && input.is_mouse_button_released(MouseButton::Left) {
+                self.select_user(user, login_manager);
+                break;
             }
         }
         self.password_input.update(input, &mut *c);
@@ -173,25 +185,15 @@ impl LoginScreen {
                     || input.is_key_pressed(Keysym::KP_Enter))))
             && !self.password_input.disabled
         {
-            if session_manager.get_desktop_environments_list().len() == 1 {
-                self.on_de_select(
-                    session_manager
-                        .get_desktop_environments_list()
-                        .first()
-                        .unwrap(),
-                    login_manager,
-                    session_manager,
-                );
+            if self.desktop_sessions.len() == 1 {
+                let desktop_session = self.desktop_sessions.first().unwrap().clone();
+                self.on_de_select(&desktop_session, login_manager, session_manager);
             } else {
                 self.is_desktop_environment_popup_open = true
             }
         }
         self.password_input.disabled = self.is_logging(login_manager, session_manager);
-        for (i, de) in session_manager
-            .get_desktop_environments_list()
-            .iter()
-            .enumerate()
-        {
+        for (i, de) in self.desktop_sessions.clone().iter().enumerate() {
             if c.pointer_over(c.id_index("desktop-environment", i as u32))
                 && input.is_mouse_button_released(MouseButton::Left)
             {
@@ -201,31 +203,55 @@ impl LoginScreen {
     }
     fn on_de_select(
         &mut self,
-        de: &DesktopEnvironmentFile,
+        de: &DesktopSession,
         login_manager: &mut LoginManager,
-        session_manager: &SessionManager,
+        session_manager: &dyn SessionManager,
     ) {
         if self.is_logging(login_manager, session_manager)
-            || session_manager.is_running(self.selected_user)
+            || session_manager
+                .is_user_session_running(&self.selected_user)
+                .unwrap_or(false)
         {
             return;
         }
         self.selected_de = Some(de.clone());
         self.session_open_error = None;
         self.is_desktop_environment_popup_open = false;
-        login_manager.start_login(&self.selected_username, self.password_input.text());
+        login_manager.submit_password(&self.selected_username, self.password_input.text());
+    }
+
+    fn select_user(&mut self, user: UserAccount, login_manager: &LoginManager) {
+        if user.id == self.selected_user {
+            return;
+        }
+
+        login_manager.reset_login_state(&self.selected_username);
+        self.selected_user = user.id;
+        self.selected_username = user.username;
+        self.selected_de = None;
+        self.session_open_error = None;
+        self.is_desktop_environment_popup_open = false;
+        self.password_input.clear();
+        login_manager.begin_authentication(self.selected_user_account().unwrap().clone());
     }
     pub fn start_session(
         &mut self,
         login_manager: &LoginManager,
-        session_manager: &mut SessionManager,
+        session_manager: &dyn SessionManager,
     ) {
-        if let Some(selected_de) = &self.selected_de {
-            if let Err(e) =
-                session_manager.start_session(login_manager, &self.selected_username, selected_de)
-            {
-                self.session_open_error = Some(e.to_string());
-            }
+        let Some(selected_de) = &self.selected_de else {
+            return;
+        };
+        let Some(user) = self.selected_user_account() else {
+            return;
+        };
+        let Some(LoginState::Authenticated(auth)) =
+            login_manager.get_current_login_state(&self.selected_username)
+        else {
+            return;
+        };
+        if let Err(e) = session_manager.start_desktop_session(user, selected_de, auth) {
+            self.session_open_error = Some(e.to_string());
         }
     }
     pub fn session_open_failed(&self) -> bool {
@@ -234,26 +260,31 @@ impl LoginScreen {
     pub fn authenticated_with_no_session(
         &self,
         login_manager: &LoginManager,
-        session_manager: &SessionManager,
-    ) -> Option<u32> {
+        session_manager: &dyn SessionManager,
+    ) -> Option<UserId> {
         match login_manager.get_current_login_state(&self.selected_username) {
-            Some(LoginState::Authenticated(_)) => {
-                if !session_manager.is_running(self.selected_user) {
-                    Some(self.selected_user)
-                } else {
-                    None
-                }
-            }
+            Some(LoginState::Authenticated(_)) => session_manager
+                .is_user_session_running(&self.selected_user)
+                .ok()
+                .filter(|is_running| !is_running)
+                .map(|_| self.selected_user.clone()),
             _ => None,
         }
     }
-    fn is_logging(&self, login_manager: &LoginManager, session_manager: &SessionManager) -> bool {
+    fn is_logging(
+        &self,
+        login_manager: &LoginManager,
+        session_manager: &dyn SessionManager,
+    ) -> bool {
         if matches!(
             login_manager.get_current_login_state(&self.selected_username),
             Some(LoginState::Logging | LoginState::Authenticated(_))
         ) {
             matches!(
-                session_manager.get_session_state_of_user(self.selected_user),
+                session_manager
+                    .user_session_status(&self.selected_user)
+                    .ok()
+                    .flatten(),
                 None | Some(SessionStatus::Crashed) | Some(SessionStatus::ShutdownGracefully)
             )
         } else {
@@ -263,14 +294,14 @@ impl LoginScreen {
     fn login_failed(&self, login_manager: &LoginManager) -> bool {
         matches!(
             login_manager.get_current_login_state(&self.selected_username),
-            Some(LoginState::Failed)
+            Some(LoginState::Failed(_))
         )
     }
     pub fn render<'clay, 'render>(
         &'render self,
         c: &mut TibsClayScope<'clay, 'render>,
         login_manager: &LoginManager,
-        session_manager: &'render SessionManager,
+        session_manager: &'render dyn SessionManager,
         frame_pool: &FrameAllocator<'render>,
         input: &dyn Input,
     ) where
@@ -305,7 +336,7 @@ impl LoginScreen {
                 .end(),
             |c| {
                 for user in &self.user_list {
-                    let is_selected = user.uid() == self.selected_user;
+                    let is_selected = user.id == self.selected_user;
                     self.render_user_item(c, user, is_selected, &frame_pool);
                 }
             },
@@ -315,13 +346,13 @@ impl LoginScreen {
     fn render_user_item<'clay, 'render>(
         &'render self,
         c: &mut TibsClayScope<'clay, 'render>,
-        user: &'render User,
+        user: &'render UserAccount,
         is_selected: bool,
         frame_pool: &FrameAllocator<'render>,
     ) where
         'clay: 'render,
     {
-        let user_name = user.name().to_str().unwrap();
+        let user_name = user.username.as_str();
         let id = c.id(frame_pool.alloc(format!("user_item-{user_name}")).as_str());
         // If the user is selected, apply a highlight background color.
         let mut decl = Declaration::new();
@@ -356,7 +387,7 @@ impl LoginScreen {
                 .corner_radius()
                 .all(99999.0)
                 .end();
-            if let Some(avatar) = self.avatars.get(&user.uid()) {
+            if let Some(avatar) = self.avatars.get(&user.id) {
                 avatar_declaration.image().data(avatar).end();
             }
             c.with(&avatar_declaration, |_| {});
@@ -376,18 +407,14 @@ impl LoginScreen {
         &'render self,
         c: &mut TibsClayScope<'clay, 'render>,
         login_manager: &LoginManager,
-        session_manager: &'render SessionManager,
+        session_manager: &'render dyn SessionManager,
         frame_pool: &FrameAllocator<'render>,
         input: &dyn Input,
     ) where
         'clay: 'render,
     {
         // Retrieve the selected user info
-        if let Some(selected) = self
-            .user_list
-            .iter()
-            .find(|u| u.uid() == self.selected_user)
-        {
+        if let Some(selected) = self.user_list.iter().find(|u| u.id == self.selected_user) {
             c.with(
                 Declaration::new()
                     .layout()
@@ -418,7 +445,7 @@ impl LoginScreen {
                                 .all(99999.0)
                                 .end();
 
-                            if let Some(avatar) = self.avatars.get(&selected.uid()) {
+                            if let Some(avatar) = self.avatars.get(&selected.id) {
                                 avatar_declaration.image().data(avatar).end();
                             }
                             // Selected user avatar
@@ -432,7 +459,7 @@ impl LoginScreen {
                                     .end(),
                                 |_| {},
                             );
-                            let user_name = selected.name().to_str().unwrap();
+                            let user_name = selected.display_name.as_str();
                             // Selected user name text
                             c.text(
                                 &user_name,
@@ -506,7 +533,7 @@ impl LoginScreen {
         &'render self,
         c: &mut TibsClayScope<'clay, 'render>,
         login_manager: &LoginManager,
-        session_manager: &'render SessionManager,
+        session_manager: &'render dyn SessionManager,
         frame_pool: &FrameAllocator<'render>,
         input: &dyn Input,
     ) where
@@ -569,7 +596,7 @@ impl LoginScreen {
                 }
                 if self.is_desktop_environment_popup_open {
                     desktop_environments_popup(
-                        session_manager,
+                        &self.desktop_sessions,
                         c,
                         frame_pool,
                         &self.de_icons,
@@ -634,7 +661,7 @@ impl LoginScreen {
 // --------- Componente popup
 
 fn desktop_environments_popup<'clay: 'render, 'render>(
-    session_manager: &'render SessionManager,
+    desktop_sessions: &'render [DesktopSession],
     c: &mut TibsClayScope<'clay, 'render>,
     frame_pool: &FrameAllocator<'render>,
     de_icons: &'render HashMap<KnownDEs, SkiaImageAsset>,
@@ -665,7 +692,6 @@ fn desktop_environments_popup<'clay: 'render, 'render>(
             .end()
             .id(c.id("desktop-environments-popup")),
         |c| {
-            let desktop_environments = session_manager.get_desktop_environments_list();
             c.text(
                 "Select a desktop environment",
                 TextConfig::new()
@@ -687,7 +713,7 @@ fn desktop_environments_popup<'clay: 'render, 'render>(
                     d
                 },
                 |c| {
-                    for (i, de) in desktop_environments.iter().enumerate() {
+                    for (i, de) in desktop_sessions.iter().enumerate() {
                         c.with_styling(
                             |c| {
                                 let mut d = Declaration::new();
@@ -708,7 +734,7 @@ fn desktop_environments_popup<'clay: 'render, 'render>(
                                 if i == 0 {
                                     d.corner_radius().top_left(10.).top_right(10.);
                                 }
-                                if i == desktop_environments.len() - 1 {
+                                if i == desktop_sessions.len() - 1 {
                                     d.corner_radius().bottom_left(10.).bottom_right(10.);
                                 }
                                 d
@@ -733,7 +759,7 @@ fn desktop_environments_popup<'clay: 'render, 'render>(
                                         KnownDEs::Hyprland => "Hyprland",
                                         KnownDEs::ArdosDE => "Ardos DE",
                                         KnownDEs::Unknown => frame_pool
-                                            .alloc(format!("{} (Unknown)", de.name()))
+                                            .alloc(format!("{} (Unknown)", de.name))
                                             .as_str(),
                                     },
                                     TextConfig::new()

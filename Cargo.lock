@@ -2043,8 +2043,6 @@ dependencies = [
  "color-eyre",
  "drm",
  "env_logger",
- "freedesktop_entry_parser",
- "futures-util",
  "gbm",
  "gl_generator",
  "glfw",
@@ -2053,17 +2051,49 @@ dependencies = [
  "input",
  "libc",
  "libhyprcursor-sys 0.2.0",
- "linux-raw-sys 0.10.0",
  "log",
- "nix 0.30.1",
- "pam",
  "rand",
  "raw-window-handle",
  "skia-safe",
  "smol",
- "uzers 0.12.1",
+ "tibs-fake-services",
+ "tibs-linux",
+ "tibs-service-definitions",
  "xkbcommon",
+]
+
+[[package]]
+name = "tibs-fake-services"
+version = "0.1.0"
+dependencies = [
+ "rand",
+ "smol",
+ "tibs-service-definitions",
+]
+
+[[package]]
+name = "tibs-linux"
+version = "0.1.0"
+dependencies = [
+ "color-eyre",
+ "freedesktop_entry_parser",
+ "futures-util",
+ "libc",
+ "linux-raw-sys 0.10.0",
+ "nix 0.30.1",
+ "pam",
+ "smol",
+ "tibs-service-definitions",
+ "uzers 0.12.1",
  "zbus_systemd",
+]
+
+[[package]]
+name = "tibs-service-definitions"
+version = "0.1.0"
+dependencies = [
+ "color-eyre",
+ "smol",
 ]
 
 [[package]]

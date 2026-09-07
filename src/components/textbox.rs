@@ -278,4 +278,10 @@ impl Textbox {
     pub fn text(&self) -> &str {
         &self.buffer
     }
+
+    pub fn clear(&mut self) {
+        self.buffer.clear();
+        self.censored_buffer.clear();
+        self.cursor = 0;
+    }
 }

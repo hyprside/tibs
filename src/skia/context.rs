@@ -83,13 +83,13 @@ fn create_skia_surface(
     let backend_render_target =
         backend_render_targets::make_gl((width as _, height as _), 0, 0, framebuffer_info);
 
-	surfaces::wrap_backend_render_target(
-		skia_context,
-		&backend_render_target,
-		skia_safe::gpu::SurfaceOrigin::BottomLeft,
-		skia_safe::ColorType::RGBA8888,
-		ColorSpace::new_srgb(),
-		None,
+    surfaces::wrap_backend_render_target(
+        skia_context,
+        &backend_render_target,
+        skia_safe::gpu::SurfaceOrigin::BottomLeft,
+        skia_safe::ColorType::RGBA8888,
+        ColorSpace::new_srgb(),
+        None,
     )
     .ok_or("Failed to wrap backend render target")
 }

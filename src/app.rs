@@ -10,7 +10,6 @@ use crate::loading_screen::LoadingScreen;
 use crate::login::LoginManager;
 use crate::login::LoginScreen;
 use crate::progress_watcher::ProgressWatcher;
-use crate::session_manager::{self, SessionManager};
 use crate::skia::SkiaContext;
 use crate::{gl, skia};
 use assets_manager::AssetCache;
@@ -19,6 +18,7 @@ use skia_safe::Rect;
 use std::rc::Rc;
 use std::thread::sleep;
 use std::time::Duration;
+use tibs_service_definitions::SessionManager;
 use xkbcommon::xkb::Keysym;
 
 use crate::context::TibsContext;
@@ -46,7 +46,7 @@ pub struct AppState<'a> {
     pub background: Background,
     pub should_exit: bool,
     pub login_manager: LoginManager,
-    pub session_manager: SessionManager,
+    pub session_manager: Box<dyn SessionManager>,
     pub login_animation: AnimationStateTracker,
     pub login_animation_direction: LoginAnimationDirection,
     pub scroll_velocity: (f32, f32),
@@ -55,7 +55,7 @@ pub struct AppState<'a> {
 
 impl AppState<'_> {
     pub fn update(&mut self, context: &mut dyn TibsContext) {
-        if !self.session_manager.is_on_tibs_tty() {
+        if !self.session_manager.is_login_session_active() {
             sleep(Duration::from_millis(2));
             return;
         }
@@ -111,16 +111,16 @@ impl AppState<'_> {
             &mut self.clay,
             context.as_input(),
             &mut self.login_manager,
-            &self.session_manager,
+            &*self.session_manager,
         );
         self.loading_screen.update(&progress, delta);
         // Update background
         self.background.update(delta);
-        if self.session_manager.is_on_tibs_tty() {
+        if self.session_manager.is_login_session_active() {
             self.login_animation_direction = LoginAnimationDirection::FadeIn;
             if self
                 .login_screen
-                .authenticated_with_no_session(&self.login_manager, &self.session_manager)
+                .authenticated_with_no_session(&self.login_manager, &*self.session_manager)
                 .is_some()
                 && !self.login_screen.session_open_failed()
             {
@@ -130,7 +130,7 @@ impl AppState<'_> {
                     .has_finished_this_frame("hide_background")
                 {
                     self.login_screen
-                        .start_session(&self.login_manager, &mut self.session_manager);
+                        .start_session(&self.login_manager, &*self.session_manager);
                     self.login_manager
                         .reset_login_state(self.login_screen.username());
                 }
@@ -183,7 +183,7 @@ impl AppState<'_> {
         self.assets.hot_reload();
     }
     pub fn render(&mut self, context: &mut dyn TibsContext) {
-        if !self.session_manager.is_on_tibs_tty() {
+        if !self.session_manager.is_login_session_active() {
             sleep(Duration::from_millis(2));
             return;
         }
@@ -253,10 +253,10 @@ impl AppState<'_> {
         }
 
         let screen_height = context.size().1 as f32;
+        let progress = self.boot_progress.poll_progress().clone();
         let mut c = self.clay.begin::<_, CustomElements>();
         let frame_pool = self.frame_pool.begin_alloc();
         let camera_y = self.screen_slide_animation_progress * screen_height;
-        let progress = self.boot_progress.poll_progress();
         c.with(
             Declaration::new()
                 .layout()
@@ -283,7 +283,7 @@ impl AppState<'_> {
                         .height(fixed!(screen_height))
                         .end(),
                     |c| {
-                        self.loading_screen.render(progress, c);
+                        self.loading_screen.render(&progress, c);
                     },
                 );
                 c.with(
@@ -296,7 +296,7 @@ impl AppState<'_> {
                         self.login_screen.render(
                             c,
                             &self.login_manager,
-                            &self.session_manager,
+                            &*self.session_manager,
                             &frame_pool,
                             context.as_input(),
                         );

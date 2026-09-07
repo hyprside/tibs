@@ -21,14 +21,10 @@ pub mod loading_screen;
 pub mod login;
 #[path = "utils/progress_watcher.rs"]
 pub mod progress_watcher;
-#[path = "login/session_manager.rs"]
-pub mod session_manager;
 #[path = "skia/context.rs"]
 pub mod skia;
 #[path = "components/textbox.rs"]
 pub mod textbox;
-#[path = "utils/tty.rs"]
-pub mod tty;
 
 pub mod app;
 pub mod context;
@@ -49,7 +45,6 @@ use crate::{
     frame_pool::FramePool,
     loading_screen::LoadingScreen,
     login::{LoginManager, LoginScreen},
-    session_manager::SessionManager,
     skia::clay_renderer::{create_measure_text_function, SkiaClayScope},
 };
 use assets_manager::AssetCache;
@@ -61,6 +56,11 @@ use std::{
     rc::Rc,
     sync::{LazyLock, Mutex},
 };
+#[cfg(feature = "fake-progress")]
+use tibs_fake_services::FakeSystemInitProgressService;
+#[cfg(feature = "linux")]
+use tibs_linux::create_platform_services;
+use tibs_service_definitions::PlatformServices;
 
 static UBUNTU_FONT: LazyLock<Typeface> = LazyLock::new(|| {
     FontMgr::new()
@@ -83,6 +83,28 @@ static MEDIUM_UBUNTU_FONT: LazyLock<Typeface> = LazyLock::new(|| {
 pub static FONTS: LazyLock<Vec<&Typeface>> =
     LazyLock::new(|| vec![&UBUNTU_FONT, &BOLD_UBUNTU_FONT, &MEDIUM_UBUNTU_FONT]);
 
+#[cfg(not(feature = "linux"))]
+compile_error!(
+    "TIBS needs a platform implementation feature. Enable `linux` or add another backend feature."
+);
+
+#[cfg(feature = "fake-progress")]
+fn apply_debug_platform_overrides(mut platform_services: PlatformServices) -> PlatformServices {
+    if matches!(std::env::var("TIBS_DEBUG_FAKE_PROGRESS_BAR"), Ok(value) if value == "1") {
+        platform_services.init_progress =
+            Box::new(FakeSystemInitProgressService::from_environment());
+    }
+    platform_services
+}
+
+#[cfg(not(feature = "fake-progress"))]
+fn apply_debug_platform_overrides(platform_services: PlatformServices) -> PlatformServices {
+    if matches!(std::env::var("TIBS_DEBUG_FAKE_PROGRESS_BAR"), Ok(value) if value == "1") {
+        eprintln!("TIBS_DEBUG_FAKE_PROGRESS_BAR is set, but the fake-progress feature is disabled");
+    }
+    platform_services
+}
+
 fn main() -> color_eyre::Result<()> {
     color_eyre::install()?;
     env_logger::init();
@@ -95,16 +117,21 @@ fn main() -> color_eyre::Result<()> {
     let assets = Rc::new(AssetCache::new(
         std::env::var("TIBS_ASSETS_FOLDER").unwrap_or("assets".into()),
     )?);
+    let platform_services = apply_debug_platform_overrides(create_platform_services());
 
     let app_state = Mutex::new(app::AppState {
-        boot_progress: progress_watcher::ProgressWatcher::new(),
+        boot_progress: progress_watcher::ProgressWatcher::new(&*platform_services.init_progress),
         fps_counter: fps_counter::FPSCounter::new(),
         last_time: std::time::Instant::now(),
         scroll_velocity: (0., 0.),
         clay,
         skia: None,
         loading_screen: LoadingScreen::new(&assets),
-        login_screen: LoginScreen::new(&assets),
+        login_screen: LoginScreen::new(
+            &assets,
+            &*platform_services.users,
+            &*platform_services.desktop_sessions,
+        ),
         cursor: Cursor::new(None),
         screen_slide_animation: BasicAnimation::new("screen_slide", 1.5, ease_in_out_circ),
         show_login_screen: false,
@@ -113,8 +140,8 @@ fn main() -> color_eyre::Result<()> {
         background: Background::new(Rc::clone(&assets)),
         assets,
         should_exit: false,
-        login_manager: LoginManager::new(),
-        session_manager: SessionManager::new(),
+        login_manager: LoginManager::new(platform_services.authentication),
+        session_manager: platform_services.sessions,
         login_animation: seq!(
             BasicAnimation::new("hide_ui", 0.2, ease_in_quad),
             DelayAnimation::new(
