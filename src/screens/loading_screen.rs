@@ -20,9 +20,7 @@ use crate::{
         Animation, BasicAnimation, ParallelAnimation, ProgressBarAnimation,
     },
     progress_watcher::ProgressData,
-    seq,
-    skia_clay::get_source_dimensions_from_skia_image,
-    skia_image_asset::SkiaImageAsset,
+    skia::asset_loaders::SkiaImageAsset,
     TibsClayScope,
 };
 pub struct LoadingScreen {
@@ -61,31 +59,24 @@ impl LoadingScreen {
             logo,
         }
     }
-    pub fn render<'clay, 'render>(
-        &'render mut self,
-        progress: &'render ProgressData,
-        c: &mut TibsClayScope<'clay, 'render>,
-        delta_time: f32,
-    ) where
-        'clay: 'render,
-    {
+    pub fn update(&mut self, progress: &ProgressData, delta_time: f32) {
         self.progress_bar_sender
             .send(progress.get_percentage())
             .unwrap();
         self.animations_state
             .extend(self.loading_animation.update(delta_time));
+        self.animations_state
+            .extend(self.end_progress.update(delta_time));
+    }
+
+    pub fn render<'clay, 'render>(
+        &'render self,
+        progress: &'render ProgressData,
+        c: &mut TibsClayScope<'clay, 'render>,
+    ) where
+        'clay: 'render,
+    {
         let end_progress_animation = self.get_animation_progress("end_progress");
-        let leading_icon = if progress.finished {
-            self.animations_state
-                .extend(self.end_progress.update(delta_time));
-            if !progress.has_failed_services() {
-                Some(&self.success_icon)
-            } else {
-                None
-            }
-        } else {
-            None
-        };
 
         c.with(
             Declaration::new()
@@ -101,7 +92,12 @@ impl LoadingScreen {
                     Declaration::new().layout().height(fixed!(52.0)).end(),
                     |_| {},
                 );
-                self.progress_bar(progress, end_progress_animation, leading_icon, c);
+                self.progress_bar(
+                    progress,
+                    end_progress_animation,
+                    progress.finished.then_some(&self.success_icon),
+                    c,
+                );
                 if progress.has_failed_services() && progress.finished {
                     c.with(
                         Declaration::new().layout().height(fixed!(22.0)).end(),
@@ -136,7 +132,6 @@ impl LoadingScreen {
                         .end()
                         .image()
                         .data(&self.alert_icon)
-                        .source_dimensions(get_source_dimensions_from_skia_image(&self.alert_icon))
                         .end(),
                     |_| {},
                 );
@@ -280,7 +275,6 @@ impl LoadingScreen {
                             .end()
                             .image()
                             .data(leading_icon)
-                            .source_dimensions(get_source_dimensions_from_skia_image(leading_icon))
                             .end(),
                         |_| {},
                     );
@@ -328,14 +322,12 @@ impl LoadingScreen {
                     Declaration::new()
                         .image()
                         .data(&self.logo)
-                        .source_dimensions({
-                            let dimensions = self.logo.dimensions();
-                            (dimensions.width as f32, dimensions.height as f32).into()
-                        })
                         .end()
                         .layout()
                         .width(Sizing::Fixed(self.get_animation_progress("logo") * 183.))
+                        .height(Sizing::Fixed(self.get_animation_progress("logo") * 183.))
                         .end(),
+                    // .aspect_ratio(self.logo.width() as f32 / self.logo.height() as f32),
                     |_| {},
                 )
             },

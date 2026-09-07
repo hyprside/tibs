@@ -7,42 +7,71 @@ use skia_safe::{self, images, Image, ImageInfo, Paint, Point, Rect, SamplingOpti
 
 use crate::input::{Input, MouseButton};
 
+struct CursorVariation {
+    image: Image,
+    hotspot: (i32, i32),
+}
 pub struct Cursor {
-    cursors: HashMap<String, Image>,
+    cursors: HashMap<String, CursorVariation>,
     cursor_size: u32,
-    style_info: CursorStyleInfo,
-    cursor_manager: HyprCursorManager,
+    style_info: Option<CursorStyleInfo>,
+    cursor_manager: Option<HyprCursorManager>,
 }
 
 impl Cursor {
     pub fn new(cursor_size: impl Into<Option<u32>>) -> Self {
         let cursor_size = cursor_size.into().unwrap_or(24);
         log::debug!("Initializing Cursor with size {}.", cursor_size);
-        let manager = HyprCursorManager::new(Some(c""));
+        let manager = HyprCursorManager::new(None);
+        if !manager.is_theme_valid() {
+            log::warn!("No valid hyprcursor theme found, using fallback cursor renderer.");
+            return Self {
+                cursors: HashMap::new(),
+                cursor_size,
+                style_info: None,
+                cursor_manager: None,
+            };
+        }
         let style_info = manager.new_style_info(cursor_size);
-        manager.load_theme_style(&style_info);
+        if !manager.load_theme_style(&style_info) || !manager.is_theme_valid() {
+            log::warn!("Failed to load hyprcursor theme style, using fallback cursor renderer.");
+            return Self {
+                cursors: HashMap::new(),
+                cursor_size,
+                style_info: None,
+                cursor_manager: None,
+            };
+        }
         log::debug!("Loaded theme style for cursor.");
         Self {
             cursors: HashMap::new(),
             cursor_size,
-            style_info,
-            cursor_manager: manager,
+            style_info: Some(style_info),
+            cursor_manager: Some(manager),
         }
     }
 
     fn load_cursor(&mut self, cursor_name: &str) {
         log::debug!("Attempting to load cursor: {}", cursor_name);
-        let image = if self.cursor_manager.is_theme_valid() {
+        let Some(cursor_manager) = self.cursor_manager.as_ref() else {
+            log::debug!("No hyprcursor manager available for: {}", cursor_name);
+            return;
+        };
+        let Some(style_info) = self.style_info.as_ref() else {
+            log::debug!("No hyprcursor style loaded for: {}", cursor_name);
+            return;
+        };
+
+        let image = if cursor_manager.is_theme_valid() {
             log::debug!("Cursor manager theme is valid.");
             let c_cursor_name = CString::new(cursor_name).unwrap();
-            let data = self
-                .cursor_manager
-                .get_cursor_image_data(&c_cursor_name, &self.style_info);
+            let data = cursor_manager.get_cursor_image_data(&c_cursor_name, style_info);
             if data.is_empty() {
                 log::debug!("No image data found for cursor: {}", cursor_name);
                 return;
             }
             log::debug!("Received image data, extracting Cairo surface.");
+
             // Get a cairo surface from the first image data entry.
             let surface = data[0].surface();
 
@@ -74,7 +103,7 @@ impl Cursor {
                 .to_vec();
             let width = image_surface.width();
             let height = image_surface.height();
-            
+
             log::debug!("Creating Skia Image from the raw pixel data.");
             // Create a Skia image directly from the raw pixel data.
             let image_info = ImageInfo::new(
@@ -91,16 +120,19 @@ impl Cursor {
             )
             .expect("Failed to create Skia Image from raster data");
 
-            log::debug!("Successfully created Skia Image for cursor: {}",
+            log::debug!(
+                "Successfully created Skia Image for cursor: {}",
                 cursor_name
             );
 
             log::debug!("Freeing hyprcursor image data.");
+            let hotspot = (data[0].hotspot_x(), data[0].hotspot_y());
             // Free the hyprcursor image data.
             unsafe { hyprcursor_cursor_image_data_free(data.as_mut_ptr().cast(), data.len() as _) }
-            Some(image)
+            Some(CursorVariation { image, hotspot })
         } else {
-            log::debug!("Cursor manager theme is not valid. Skipping cursor load for: {}",
+            log::debug!(
+                "Cursor manager theme is not valid. Skipping cursor load for: {}",
                 cursor_name
             );
             None
@@ -113,11 +145,9 @@ impl Cursor {
         }
     }
 
-    pub fn get_or_load_cursor(&mut self, cursor_name: &str) -> Option<&Image> {
+    pub fn get_or_load_cursor(&mut self, cursor_name: &str) -> Option<&CursorVariation> {
         if !self.cursors.contains_key(cursor_name) {
-            log::debug!("Cursor '{}' not found in cache, loading now.",
-                cursor_name
-            );
+            log::debug!("Cursor '{}' not found in cache, loading now.", cursor_name);
             self.load_cursor(cursor_name);
         }
         self.cursors.get(cursor_name)
@@ -130,8 +160,12 @@ impl Cursor {
         cursor_name: &str,
     ) {
         let (mx, my) = input.mouse_position();
-        let pos = Point::new(mx, my);
-        if let Some(image) = self.get_or_load_cursor(cursor_name) {
+        if let Some(CursorVariation {
+            image,
+            hotspot: (hx, hy),
+        }) = self.get_or_load_cursor(cursor_name)
+        {
+            let pos = Point::new(mx - *hx as f32, my - *hy as f32);
             let dest_rect =
                 Rect::from_xywh(pos.x, pos.y, image.width() as f32, image.height() as f32);
             skia_canvas.draw_image_rect_with_sampling_options(
@@ -142,6 +176,7 @@ impl Cursor {
                 &Paint::default().set_anti_alias(true),
             );
         } else {
+            let pos = Point::new(mx, my);
             log::debug!("Fallback rendering for cursor '{}'.", cursor_name);
             // Fallback: draw a circle.
             let cursor_radius = if input.is_mouse_button_down(MouseButton::Left) {

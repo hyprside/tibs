@@ -234,7 +234,7 @@ pub struct DrmContext {
     plane: plane::Handle,
     plane_properties: HashMap<String, property::Info>,
     first_frame: bool,
-    previous_buffer: Option<BufferObject<()>>
+    previous_buffer: Option<BufferObject<()>>,
 }
 
 fn find_egl_config(egl_display: &egl::display::Display) -> egl::config::Config {
@@ -335,7 +335,7 @@ impl DrmContext {
             libc::signal(SIGUSR2, handle_acquire as usize);
         }
         let mut context = DrmContext {
-        		previous_buffer: None,
+            previous_buffer: None,
             display: egl_display,
             gbm_surface,
             surface,

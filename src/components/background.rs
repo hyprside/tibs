@@ -1,9 +1,4 @@
-use std::{
-    collections::HashMap,
-    f32::consts::PI,
-    ops::{Add, Div, Mul},
-    time::{Instant, SystemTime},
-};
+use std::{collections::HashMap, rc::Rc, sync::mpsc::Sender};
 
 use assets_manager::AssetCache;
 use rand::Rng;
@@ -11,26 +6,29 @@ use skia_safe::{Canvas, Paint, Rect, RuntimeEffect};
 
 use crate::{
     all,
-    animation::{colors, easing, Animation, BasicAnimation},
-    seq,
-    skia_shader_asset::SkiaShaderAsset,
+    animation::{
+        self,
+        colors::{self, interpolate_color_normalized},
+        easing, Animation, BasicAnimation,
+    },
+    login::{LoginManager, LoginScreen, LoginState},
+    skia::asset_loaders::SkiaShaderAsset,
 };
 
-pub struct Background<'a> {
-    light_shader_asset: &'a assets_manager::Handle<SkiaShaderAsset>,
+pub struct Background {
+    assets: Rc<AssetCache>,
     animations_state: HashMap<String, f32>,
     elapsed_time: f32,
     pub time_offset: f32,
     fade_in_animation: Box<dyn Animation>, // Animação para o fade-in das cores
 }
-impl<'a> Background<'a> {
-    pub fn new(assets: &'a AssetCache) -> Self {
-        let load = |s: &str| assets.load::<SkiaShaderAsset>(s).unwrap();
+impl Background {
+    pub fn new(assets: Rc<AssetCache>) -> Self {
         fn rd() -> f32 {
             rand::rng().random_range(0.4..7.0)
         }
         Self {
-            light_shader_asset: load("shaders.background.meshgradient"),
+            assets,
             animations_state: HashMap::new(),
             fade_in_animation: Box::new(all!(
                 BasicAnimation::new("color_0", rd(), easing::ease_out_quad),
@@ -52,7 +50,11 @@ impl<'a> Background<'a> {
             .extend(self.fade_in_animation.update(delta));
     }
     pub fn render(&self, canvas: &Canvas) {
-        let light_shader = self.light_shader_asset.read();
+        let light_shader = self
+            .assets
+            .load::<SkiaShaderAsset>("shaders.background.meshgradient")
+            .unwrap()
+            .read();
         let screen_size = (
             unsafe { canvas.surface() }.unwrap().width() as f32,
             unsafe { canvas.surface() }.unwrap().height() as f32,
@@ -64,12 +66,13 @@ impl<'a> Background<'a> {
             colors: [(f32, f32, f32); 5],
             forces: [f32; 5],
         }
+        let success_animation = self.get_animation_progress("success_animation");
         let target_colors = [
-            (1.00, 0.74, 0.63), // Laranja pastel
-            (0.87, 0.07, 0.27), // Vermelho vivo
-            (0.98, 0.91, 0.63), // Amarelo suave
-            (0.63, 0.82, 0.80), // Azul esverdeado
-            colors::rgb_to_norm("#FF8966"),
+            colors::rgb_to_norm("#0F1419"),
+            colors::rgb_to_norm("#225282"),
+            colors::rgb_to_norm("#112f4e"),
+            colors::rgb_to_norm("#031120"),
+            colors::rgb_to_norm("#38628f"),
         ];
         // Interpolação das cores com base no progresso das animações
         let interpolated_colors: [(f32, f32, f32); 5] = target_colors

@@ -1,6 +1,6 @@
-use std::ops::Deref;
 use assets_manager::{loader::Loader, Asset};
 use skia_safe::RuntimeEffect;
+use std::ops::Deref;
 
 pub struct SkiaShaderAsset(pub RuntimeEffect);
 
@@ -15,7 +15,6 @@ impl Deref for SkiaShaderAsset {
         &self.0
     }
 }
-
 
 impl Asset for SkiaShaderAsset {
     const EXTENSIONS: &'static [&'static str] = &["sksl"];
