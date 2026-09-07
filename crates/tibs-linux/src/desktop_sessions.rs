@@ -20,6 +20,7 @@ impl Default for LinuxDesktopSessionRepository {
 
 impl DesktopSessionRepositoryService for LinuxDesktopSessionRepository {
     fn list_sessions(&self) -> Result<Vec<DesktopSession>> {
+        log::info!("Loading Linux desktop sessions");
         let session_dirs = env::var("XDG_SESSION_DIRS")
             .map(|value| value.split(':').map(String::from).collect::<Vec<_>>())
             .unwrap_or_else(|_| {
@@ -29,7 +30,8 @@ impl DesktopSessionRepositoryService for LinuxDesktopSessionRepository {
                 ]
             });
 
-        Ok(session_dirs
+        log::debug!("Desktop session directories: {}", session_dirs.join(":"));
+        let sessions = session_dirs
             .iter()
             .filter_map(|dir| fs::read_dir(dir).ok())
             .flat_map(|entries| entries.filter_map(Result::ok))
@@ -52,6 +54,8 @@ impl DesktopSessionRepositoryService for LinuxDesktopSessionRepository {
                     command,
                 })
             })
-            .collect())
+            .collect::<Vec<_>>();
+        log::info!("Loaded {} Linux desktop sessions", sessions.len());
+        Ok(sessions)
     }
 }

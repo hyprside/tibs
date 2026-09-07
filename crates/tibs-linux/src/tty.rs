@@ -23,6 +23,7 @@ impl TtyInfo {
     }
 
     pub(crate) fn make_current(&self) -> Result<()> {
+        log::info!("Making tty{} current", self.number);
         let root_tty = OpenOptions::new().read(true).write(true).open("/dev/tty")?;
         let fd = root_tty.as_raw_fd();
 

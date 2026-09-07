@@ -50,6 +50,9 @@ impl SystemInitProgressService for FakeSystemInitProgressService {
         let service_count = self.service_count;
         let tick = self.tick;
         let simulate_failure = self.simulate_failure;
+        log::info!(
+            "Starting fake init progress service; service_count={service_count}, simulate_failure={simulate_failure}"
+        );
 
         std::thread::spawn(move || {
             smol::block_on(async move {
@@ -78,12 +81,15 @@ impl SystemInitProgressService for FakeSystemInitProgressService {
                     let finished = services
                         .values()
                         .all(|state| *state != FakeServiceState::Loading);
-                    if tx
-                        .send(to_init_progress(&services, finished))
-                        .await
-                        .is_err()
-                        || finished
-                    {
+                    let progress = to_init_progress(&services, finished);
+                    log::debug!(
+                        "Fake init progress tick; loaded={}, failed={}, pending={}, finished={}",
+                        progress.loaded_services,
+                        progress.failed_services,
+                        progress.pending_services,
+                        progress.finished
+                    );
+                    if tx.send(progress).await.is_err() || finished {
                         break;
                     }
                     smol::Timer::after(tick).await;

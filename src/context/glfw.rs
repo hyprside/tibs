@@ -20,6 +20,7 @@ pub struct GlfwContext {
 
 impl GlfwContext {
     pub fn new(title: &str) -> Self {
+        log::info!("Initializing GLFW context");
         let mut glfw = glfw::init(glfw::fail_on_errors).unwrap();
 
         glfw.window_hint(WindowHint::ContextVersion(3, 0));
@@ -31,9 +32,11 @@ impl GlfwContext {
         ));
         let (mut window, events) = glfw
             .with_primary_monitor(|glfw, m| {
+                log::debug!("Creating GLFW window on primary monitor: {}", m.is_some());
                 glfw.create_window(1280, 800, title, glfw::WindowMode::Windowed)
             })
             .expect("Failed to create GLFW window.");
+        log::info!("GLFW window created");
 
         window.make_current();
         window.set_key_polling(true);
@@ -51,6 +54,7 @@ impl GlfwContext {
             input_characters: vec![],
         };
         gl::load_with(|symbol| context.get_proc_address(symbol));
+        log::info!("OpenGL function pointers loaded for GLFW context");
         context
     }
     pub fn glfw_window(&self) -> Rc<RefCell<PWindow>> {

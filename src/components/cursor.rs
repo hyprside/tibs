@@ -21,8 +21,9 @@ pub struct Cursor {
 impl Cursor {
     pub fn new(cursor_size: impl Into<Option<u32>>) -> Self {
         let cursor_size = cursor_size.into().unwrap_or(24);
-        log::debug!("Initializing Cursor with size {}.", cursor_size);
+        log::info!("Initializing cursor subsystem with size {}", cursor_size);
         let manager = HyprCursorManager::new(None);
+        log::debug!("Created hyprcursor manager");
         if !manager.is_theme_valid() {
             log::warn!("No valid hyprcursor theme found, using fallback cursor renderer.");
             return Self {
@@ -42,7 +43,7 @@ impl Cursor {
                 cursor_manager: None,
             };
         }
-        log::debug!("Loaded theme style for cursor.");
+        log::info!("Loaded hyprcursor theme style");
         Self {
             cursors: HashMap::new(),
             cursor_size,
@@ -79,10 +80,7 @@ impl Cursor {
             let width = self.cursor_size;
             let height = self.cursor_size;
 
-            println!(
-                "[DEBUG] Creating new Cairo ImageSurface with dimensions: {}x{}",
-                width, height
-            );
+            log::debug!("Creating Cairo ImageSurface for cursor with dimensions {width}x{height}");
             // Create a new Cairo ImageSurface to render into memory
             let mut image_surface =
                 ImageSurface::create(Format::ARgb32, width as i32, height as i32)

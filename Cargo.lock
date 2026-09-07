@@ -2066,6 +2066,7 @@ dependencies = [
 name = "tibs-fake-services"
 version = "0.1.0"
 dependencies = [
+ "log",
  "rand",
  "smol",
  "tibs-service-definitions",
@@ -2080,6 +2081,7 @@ dependencies = [
  "futures-util",
  "libc",
  "linux-raw-sys 0.10.0",
+ "log",
  "nix 0.30.1",
  "pam",
  "smol",

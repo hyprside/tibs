@@ -16,6 +16,7 @@ pub use users::LinuxUserRepository;
 use tibs_service_definitions::PlatformServices;
 
 pub fn create_platform_services() -> PlatformServices {
+    log::info!("Creating Linux platform services");
     PlatformServices {
         init_progress: Box::new(LinuxSystemInitProgressService::new()),
         users: Box::new(LinuxUserRepository::new()),

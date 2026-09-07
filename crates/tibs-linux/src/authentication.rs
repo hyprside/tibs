@@ -42,6 +42,7 @@ pub struct LinuxAuthenticationService;
 
 impl LinuxAuthenticationService {
     pub fn new() -> Self {
+        log::info!("Initializing Linux authentication service");
         Self
     }
 }
@@ -54,6 +55,10 @@ impl Default for LinuxAuthenticationService {
 
 impl AuthenticationService for LinuxAuthenticationService {
     fn create_session(&self, user: UserAccount) -> Result<Box<dyn AuthenticationSession>> {
+        log::info!(
+            "Creating Linux PAM authentication session for user '{}'",
+            user.username
+        );
         Ok(Box::new(LinuxAuthenticationSession::new(user)))
     }
 }
@@ -81,6 +86,10 @@ impl AuthStateBus {
     }
 
     fn set(&self, state: AuthState) {
+        log::debug!(
+            "Publishing Linux authentication state: {}",
+            auth_state_label(&state)
+        );
         if let Ok(mut current) = self.current.lock() {
             *current = state.clone();
         }
@@ -121,12 +130,15 @@ impl AuthenticationSession for LinuxAuthenticationSession {
         let state = Arc::clone(&self.state);
         let cancelled = Arc::clone(&self.cancelled);
 
+        log::info!("Starting PAM password authentication for user '{username}'");
         state.set(AuthState::Checking);
         std::thread::spawn(move || {
             let fail = |message: String| {
                 if cancelled.load(Ordering::Relaxed) {
+                    log::info!("PAM authentication for user '{username}' cancelled");
                     state.set(AuthState::Cancelled);
                 } else {
+                    log::warn!("PAM authentication for user '{username}' failed: {message}");
                     state.set(AuthState::Failed(message));
                 }
             };
@@ -144,10 +156,12 @@ impl AuthenticationSession for LinuxAuthenticationSession {
             }
 
             if cancelled.load(Ordering::Relaxed) {
+                log::info!("PAM authentication for user '{username}' succeeded after cancellation");
                 state.set(AuthState::Cancelled);
                 return;
             }
 
+            log::info!("PAM authentication for user '{username}' succeeded");
             state.set(AuthState::Authenticated(AuthProof::new(
                 LinuxPamAuthProof::new(client),
             )));
@@ -157,7 +171,21 @@ impl AuthenticationSession for LinuxAuthenticationSession {
     }
 
     fn cancel(&self) {
+        log::info!(
+            "Cancelling Linux authentication session for user '{}'",
+            self.user.username
+        );
         self.cancelled.store(true, Ordering::Relaxed);
         self.state.set(AuthState::Cancelled);
+    }
+}
+
+fn auth_state_label(state: &AuthState) -> &'static str {
+    match state {
+        AuthState::WaitingForInteraction => "waiting_for_interaction",
+        AuthState::Checking => "checking",
+        AuthState::Failed(_) => "failed",
+        AuthState::Authenticated(_) => "authenticated",
+        AuthState::Cancelled => "cancelled",
     }
 }

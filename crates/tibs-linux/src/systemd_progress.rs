@@ -54,14 +54,18 @@ impl Default for LinuxSystemInitProgressService {
 impl SystemInitProgressService for LinuxSystemInitProgressService {
     fn watch_progress(&self) -> smol::channel::Receiver<InitProgress> {
         let (tx, rx) = smol::channel::unbounded();
+        log::info!("Starting systemd init progress watcher");
 
         std::thread::spawn(move || {
             smol::block_on(async move {
                 let mut progress_data = LinuxProgressData::default();
                 let _ = tx.send(progress_data.to_init_progress()).await;
 
+                log::info!("Connecting to system bus for systemd progress");
                 let connection = Connection::system().await?;
+                log::info!("Connected to system bus");
                 let manager = ManagerProxy::new(&connection).await?;
+                log::info!("Connected to systemd manager");
                 let mut job_new_stream = manager.receive_job_new().await?;
                 let mut job_removed_stream = manager.receive_job_removed().await?;
                 let mut system_started_up = manager.receive_startup_finished().await?;
@@ -72,11 +76,13 @@ impl SystemInitProgressService for LinuxSystemInitProgressService {
 
                 if default_target.active_state().await? == "active" {
                     progress_data.finished = true;
+                    log::info!("systemd default target is already active");
                     let _ = tx.send(progress_data.to_init_progress()).await;
                     return Ok(());
                 }
 
                 let jobs = manager.list_jobs().await?;
+                log::info!("Loaded {} initial systemd jobs", jobs.len());
                 progress_data.services = jobs
                     .iter()
                     .filter(|job| job.3 != "done")
@@ -94,13 +100,17 @@ impl SystemInitProgressService for LinuxSystemInitProgressService {
                                 break;
                             };
                             let Ok(args) = new_event.args() else {
-                                eprintln!("Failed to get JobNew event args");
+                                log::warn!("Failed to get JobNew event args");
                                 continue;
                             };
                             progress_data
                                 .services
                                 .entry(args.unit)
                                 .or_insert(ServiceState::Loading);
+                            log::debug!(
+                                "systemd job started; tracked pending services: {}",
+                                progress_data.to_init_progress().pending_services
+                            );
                             if tx.send(progress_data.to_init_progress()).await.is_err() {
                                 break;
                             }
@@ -110,7 +120,7 @@ impl SystemInitProgressService for LinuxSystemInitProgressService {
                                 break;
                             };
                             let Ok(args) = removed_event.args() else {
-                                eprintln!("Failed to get JobRemoved event args");
+                                log::warn!("Failed to get JobRemoved event args");
                                 continue;
                             };
 
@@ -119,6 +129,14 @@ impl SystemInitProgressService for LinuxSystemInitProgressService {
                                 "canceled" | "timeout" | "failed" => ServiceState::Failed,
                                 _ => ServiceState::Failed,
                             });
+                            let progress = progress_data.to_init_progress();
+                            log::debug!(
+                                "systemd job removed with result {}; loaded={}, failed={}, pending={}",
+                                args.result,
+                                progress.loaded_services,
+                                progress.failed_services,
+                                progress.pending_services
+                            );
                             if tx.send(progress_data.to_init_progress()).await.is_err() {
                                 break;
                             }
@@ -126,6 +144,7 @@ impl SystemInitProgressService for LinuxSystemInitProgressService {
                         system_started_up_event = system_started_up.next().fuse() => {
                             if system_started_up_event.is_some() {
                                 progress_data.finished = true;
+                                log::info!("systemd startup finished");
                                 if tx.send(progress_data.to_init_progress()).await.is_err() {
                                     break;
                                 }
@@ -138,7 +157,7 @@ impl SystemInitProgressService for LinuxSystemInitProgressService {
 
                 zbus::Result::Ok(())
             })
-            .unwrap_or_else(|error| eprintln!("Failed to watch systemd progress: {error:#?}"));
+            .unwrap_or_else(|error| log::error!("Failed to watch systemd progress: {error:#?}"));
         });
 
         rx

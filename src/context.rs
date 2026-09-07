@@ -29,11 +29,16 @@ impl<T: GlesContext + Input> TibsContext for T {
 
 pub fn select_and_init_context() -> Box<dyn TibsContext> {
     let display_is_defined = std::env::var("DISPLAY").is_ok();
+    log::info!("Selecting graphics stack; DISPLAY present: {display_is_defined}");
     if display_is_defined {
         #[cfg(not(feature = "glfw"))]
-        println!("[WARN] GLFW feature is not enabled, ignoring DISPLAY variable");
+        log::warn!("GLFW feature is not enabled, ignoring DISPLAY variable");
         #[cfg(feature = "glfw")]
-        return Box::new(glfw::GlfwContext::new("Tiago's Incredible Boot Screen"));
+        {
+            log::info!("Using GLFW graphics stack");
+            return Box::new(glfw::GlfwContext::new("Tiago's Incredible Boot Screen"));
+        }
     }
+    log::info!("Using DRM graphics stack");
     Box::new(drm::DrmContext::new())
 }

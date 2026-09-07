@@ -22,9 +22,11 @@ struct LinuxSessionManagerState {
 
 impl LinuxSessionManager {
     pub fn new() -> Self {
+        let tibs_tty = TtyInfo::active_number();
+        log::info!("Initializing Linux session manager on tty{tibs_tty}");
         Self {
             state: RefCell::new(LinuxSessionManagerState::default()),
-            tibs_tty: TtyInfo::active_number(),
+            tibs_tty,
         }
     }
 
@@ -84,6 +86,11 @@ impl SessionManager for LinuxSessionManager {
             .ok_or_eyre("There's no free tty's left for this session.")?;
         state.next_session_id += 1;
         let handle = SessionHandle(format!("linux-tty-{}", state.next_session_id));
+        log::info!(
+            "Created pending Linux session {:?} reserved for tty{}",
+            handle,
+            free_tty.number
+        );
         state.pending_sessions.insert(handle.clone(), free_tty);
         Ok(handle)
     }
@@ -106,6 +113,7 @@ impl SessionManager for LinuxSessionManager {
             })
             .ok_or_eyre("Unknown Linux session handle")?;
 
+        log::info!("Switching to Linux session {:?} on tty{}", session, tty);
         TtyInfo::new(tty)
             .ok_or_eyre("Could not reopen Linux session TTY")?
             .make_current()
@@ -123,6 +131,12 @@ impl SessionManager for LinuxSessionManager {
             .pending_sessions
             .remove(session)
             .ok_or_eyre("Unknown or already-started Linux session handle")?;
+        log::info!(
+            "Starting compositor in Linux session {:?} for user '{}' on tty{}",
+            session,
+            user.username,
+            tty.number
+        );
         let running_session = LinuxSession::new(user, tty, command, auth).map(Rc::new)?;
         state
             .sessions
@@ -154,6 +168,13 @@ impl SessionManager for LinuxSessionManager {
             .pending_sessions
             .remove(&handle)
             .ok_or_eyre("Created Linux session handle had no reserved TTY")?;
+        log::info!(
+            "Starting desktop session '{}' for user '{}' in {:?} on tty{}",
+            desktop_session.name,
+            user.username,
+            handle,
+            tty.number
+        );
         let session =
             LinuxSession::new_for_desktop_session(user, tty, desktop_session, auth).map(Rc::new)?;
         state.sessions.insert(user.id.clone(), Rc::clone(&session));

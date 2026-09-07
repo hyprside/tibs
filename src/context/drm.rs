@@ -29,6 +29,7 @@ use std::u64;
 
 static TTY_FOCUS: AtomicBool = AtomicBool::new(true);
 static TTY: LazyLock<std::fs::File> = LazyLock::new(|| {
+    log::info!("Opening controlling TTY for DRM context");
     OpenOptions::new()
         .read(true)
         .write(true)
@@ -50,17 +51,19 @@ const VT_SETMODE: u64 = 0x5602; // from <linux/vt.h>
 const VT_RELDISP: u64 = 0x5605; // from <linux/vt.h>
 
 unsafe extern "C" fn handle_release(_sig: i32) {
+    log::info!("DRM VT release signal received");
     TTY_FOCUS.store(false, Ordering::Relaxed);
     libc::ioctl(TTY.as_raw_fd(), VT_RELDISP, 1);
     set_tty_text_mode(TTY.as_raw_fd())
-        .map_err(|e| println!("Failed to set text mode: {e}"))
+        .map_err(|e| log::error!("Failed to set text mode: {e}"))
         .ok();
 }
 
 unsafe extern "C" fn handle_acquire(_sig: i32) {
+    log::info!("DRM VT acquire signal received");
     TTY_FOCUS.store(true, Ordering::Relaxed);
     set_tty_graphics_mode(TTY.as_raw_fd())
-        .map_err(|e| println!("Failed to set graphics mode: {e}"))
+        .map_err(|e| log::error!("Failed to set graphics mode: {e}"))
         .ok();
 }
 const KDSETMODE: u64 = 0x4B3A; // from <linux/kd.h>
@@ -123,6 +126,7 @@ impl ControlDevice for Card {}
 /// Simple helper methods for opening a `Card`.
 impl Card {
     pub fn open(path: &str) -> std::io::Result<Self> {
+        log::debug!("Opening DRM card at {path}");
         let mut options = std::fs::OpenOptions::new();
         options.read(true);
         options.write(true);
@@ -130,6 +134,7 @@ impl Card {
     }
 
     pub fn open_global() -> Self {
+        log::info!("Looking for DRM device");
         let query = || {
             egl::device::Device::query_devices()
                 .expect("Failed to query devices")
@@ -145,7 +150,7 @@ impl Card {
         loop {
             let Some(drm) = devices.next() else {
                 if started_time.elapsed().as_secs() < 5 {
-                    println!("Failed to find device, trying again in 50ms");
+                    log::debug!("Failed to find DRM device, trying again in 50ms");
                     devices = query();
                     std::thread::sleep(Duration::from_millis(50));
                     continue;
@@ -154,11 +159,11 @@ impl Card {
             };
             match Self::open(drm) {
                 Ok(card) => {
-                    println!("Using device: {}", drm);
+                    log::info!("Using DRM device: {}", drm);
                     return card;
                 }
                 Err(e) => {
-                    println!("Failed to open device {}: {}", drm, e);
+                    log::warn!("Failed to open DRM device {}: {}", drm, e);
                 }
             }
         }
@@ -258,7 +263,7 @@ impl GlesContext for DrmContext {
 
     fn swap_buffers(&mut self) -> bool {
         self._swap_buffers()
-            .map_err(|e| println!("Failed to swap buffers: {}", e))
+            .map_err(|e| log::error!("Failed to swap buffers: {}", e))
             .is_ok()
     }
 
@@ -269,6 +274,7 @@ impl GlesContext for DrmContext {
 
 impl DrmContext {
     pub fn new() -> Self {
+        log::info!("Initializing DRM context");
         let card = Card::open_global();
 
         card.set_client_capability(drm::ClientCapability::UniversalPlanes, true)
@@ -277,13 +283,22 @@ impl DrmContext {
             .expect("Unable to request Atomic capability");
 
         let (connector, crtc, mode, plane) = card.get_connector_and_crtc();
+        log::info!(
+            "Selected DRM connector {:?}, CRTC {:?}, mode {:?}, plane {:?}",
+            connector.handle(),
+            crtc.handle(),
+            mode.size(),
+            plane
+        );
         let gbm = gbm::Device::new(card).unwrap();
         let (disp_width, disp_height) = mode.size();
         let rdh = RawDisplayHandle::Gbm(GbmDisplayHandle::new(
             NonNull::new(gbm.as_raw_mut()).unwrap().cast(),
         ));
         let egl_display = unsafe { egl::display::Display::new(rdh) }.expect("Create EGL Display");
+        log::info!("Created EGL display for DRM context");
         let config = find_egl_config(&egl_display);
+        log::debug!("Selected EGL config with {} samples", config.num_samples());
         let gbm_surface = gbm
             .create_surface::<()>(
                 disp_width.into(),
@@ -292,6 +307,7 @@ impl DrmContext {
                 BufferObjectFlags::SCANOUT | BufferObjectFlags::RENDERING,
             )
             .unwrap();
+        log::info!("Created GBM surface {}x{}", disp_width, disp_height);
         let rwh = RawWindowHandle::Gbm(GbmWindowHandle::new(
             NonNull::new(gbm_surface.as_raw_mut()).unwrap().cast(),
         ));
@@ -314,8 +330,10 @@ impl DrmContext {
                 .make_current(&surface)
                 .unwrap()
         };
+        log::info!("Created EGL context and made it current");
         let mut libinput = Libinput::new_with_udev(InputInterface);
         libinput.udev_assign_seat("seat0").unwrap();
+        log::info!("libinput assigned to seat0");
         let xkb_context = xkbcommon::xkb::Context::new(xkbcommon::xkb::CONTEXT_NO_FLAGS);
         let xkb_keymap = xkbcommon::xkb::Keymap::new_from_names(
             &xkb_context,
@@ -330,10 +348,12 @@ impl DrmContext {
         let xkb_state = xkbcommon::xkb::State::new(&xkb_keymap);
         let tty_fd = TTY.as_raw_fd();
         set_vt_mode(tty_fd).expect("Failed to set VT mode");
+        log::info!("Configured DRM VT process mode");
         unsafe {
             libc::signal(SIGUSR1, handle_release as usize);
             libc::signal(SIGUSR2, handle_acquire as usize);
         }
+        log::info!("Installed DRM VT signal handlers");
         let mut context = DrmContext {
             previous_buffer: None,
             display: egl_display,
@@ -357,6 +377,7 @@ impl DrmContext {
             first_frame: true,
         };
         gl::load_with(|symbol| context.get_proc_address(symbol));
+        log::info!("OpenGL function pointers loaded for DRM context");
         context
     }
 

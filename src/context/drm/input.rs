@@ -121,11 +121,11 @@ impl Input for DrmContext {
         if self.focused != new_focus {
             if new_focus {
                 if unsafe { libc::ioctl(self.gbm_device.0.as_raw_fd(), 0x2000641e, 0) } != 0 {
-                    println!("Failed to resume rendering")
+                    log::error!("Failed to resume DRM rendering")
                 }
             } else {
                 if unsafe { libc::ioctl(self.gbm_device.0.as_raw_fd(), 0x2000641f, 0) } != 0 {
-                    println!("Failed to pause rendering")
+                    log::error!("Failed to pause DRM rendering")
                 }
             }
         }

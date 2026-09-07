@@ -18,7 +18,8 @@ impl Default for LinuxUserRepository {
 
 impl UserRepositoryService for LinuxUserRepository {
     fn list_users(&self) -> Result<Vec<UserAccount>> {
-        Ok(unsafe { uzers::all_users() }
+        log::info!("Loading Linux users");
+        let users = unsafe { uzers::all_users() }
             .filter(|user| {
                 let uid = user.uid();
                 uid >= 1000 && uid < 65534 && !user.shell().ends_with("nologin")
@@ -36,6 +37,8 @@ impl UserRepositoryService for LinuxUserRepository {
                     avatar_path,
                 }
             })
-            .collect())
+            .collect::<Vec<_>>();
+        log::info!("Loaded {} Linux users", users.len());
+        Ok(users)
     }
 }

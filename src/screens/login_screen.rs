@@ -118,9 +118,15 @@ impl LoginScreen {
         let desktop_sessions = desktop_session_repository
             .list_sessions()
             .expect("Failed to load desktop sessions");
+        log::info!(
+            "Login screen loaded {} users and {} desktop sessions",
+            user_list.len(),
+            desktop_sessions.len()
+        );
 
         let selected_user = user_list[0].id.clone();
         let selected_username = user_list[0].username.clone();
+        log::info!("Initial selected login user: '{selected_username}'");
         Self {
             avatars: user_list
                 .iter()
@@ -187,8 +193,18 @@ impl LoginScreen {
         {
             if self.desktop_sessions.len() == 1 {
                 let desktop_session = self.desktop_sessions.first().unwrap().clone();
+                log::info!(
+                    "Login requested for user '{}' with one desktop session available; selecting '{}'",
+                    self.selected_username,
+                    desktop_session.name
+                );
                 self.on_de_select(&desktop_session, login_manager, session_manager);
             } else {
+                log::info!(
+                    "Login requested for user '{}' with {} desktop sessions available; opening picker",
+                    self.selected_username,
+                    self.desktop_sessions.len()
+                );
                 self.is_desktop_environment_popup_open = true
             }
         }
@@ -212,8 +228,18 @@ impl LoginScreen {
                 .is_user_session_running(&self.selected_user)
                 .unwrap_or(false)
         {
+            log::warn!(
+                "Ignoring desktop session selection '{}' for user '{}' because login is already busy or session is running",
+                de.name,
+                self.selected_username
+            );
             return;
         }
+        log::info!(
+            "Desktop session '{}' selected for user '{}'; submitting password auth",
+            de.name,
+            self.selected_username
+        );
         self.selected_de = Some(de.clone());
         self.session_open_error = None;
         self.is_desktop_environment_popup_open = false;
@@ -222,9 +248,15 @@ impl LoginScreen {
 
     fn select_user(&mut self, user: UserAccount, login_manager: &LoginManager) {
         if user.id == self.selected_user {
+            log::debug!("Selected user '{}' clicked again; ignoring", user.username);
             return;
         }
 
+        log::info!(
+            "Switching selected user from '{}' to '{}'",
+            self.selected_username,
+            user.username
+        );
         login_manager.reset_login_state(&self.selected_username);
         self.selected_user = user.id;
         self.selected_username = user.username;
@@ -240,17 +272,40 @@ impl LoginScreen {
         session_manager: &dyn SessionManager,
     ) {
         let Some(selected_de) = &self.selected_de else {
+            log::warn!(
+                "Authenticated user '{}' has no selected desktop session; cannot start compositor",
+                self.selected_username
+            );
             return;
         };
         let Some(user) = self.selected_user_account() else {
+            log::error!(
+                "Selected user id {:?} has no matching user account; cannot start compositor",
+                self.selected_user
+            );
             return;
         };
         let Some(LoginState::Authenticated(auth)) =
             login_manager.get_current_login_state(&self.selected_username)
         else {
+            log::warn!(
+                "Tried to start desktop session '{}' for user '{}' without authenticated state",
+                selected_de.name,
+                self.selected_username
+            );
             return;
         };
+        log::info!(
+            "Starting desktop session '{}' for user '{}'",
+            selected_de.name,
+            self.selected_username
+        );
         if let Err(e) = session_manager.start_desktop_session(user, selected_de, auth) {
+            log::error!(
+                "Failed to start desktop session '{}' for user '{}': {e:#?}",
+                selected_de.name,
+                self.selected_username
+            );
             self.session_open_error = Some(e.to_string());
         }
     }
@@ -684,7 +739,7 @@ fn desktop_environments_popup<'clay: 'render, 'render>(
             .layout()
             .direction(LayoutDirection::TopToBottom)
             .width(fit!(250.0))
-            .height(fit!(0.0, 130.0))
+            .height(fit!())
             .end()
             .layout()
             .padding(Padding::all(12))
@@ -708,7 +763,9 @@ fn desktop_environments_popup<'clay: 'render, 'render>(
                         .between_children(1)
                         .end()
                         .clip(false, true, c.scroll_offset());
-                    d.layout().width(grow!());
+                    d.layout()
+                        .width(grow!())
+                        .direction(LayoutDirection::TopToBottom);
                     d.corner_radius().all(10.);
                     d
                 },

@@ -91,6 +91,7 @@ compile_error!(
 #[cfg(feature = "fake-progress")]
 fn apply_debug_platform_overrides(mut platform_services: PlatformServices) -> PlatformServices {
     if matches!(std::env::var("TIBS_DEBUG_FAKE_PROGRESS_BAR"), Ok(value) if value == "1") {
+        log::info!("Using fake init progress service because TIBS_DEBUG_FAKE_PROGRESS_BAR=1");
         platform_services.init_progress =
             Box::new(FakeSystemInitProgressService::from_environment());
     }
@@ -100,23 +101,28 @@ fn apply_debug_platform_overrides(mut platform_services: PlatformServices) -> Pl
 #[cfg(not(feature = "fake-progress"))]
 fn apply_debug_platform_overrides(platform_services: PlatformServices) -> PlatformServices {
     if matches!(std::env::var("TIBS_DEBUG_FAKE_PROGRESS_BAR"), Ok(value) if value == "1") {
-        eprintln!("TIBS_DEBUG_FAKE_PROGRESS_BAR is set, but the fake-progress feature is disabled");
+        log::warn!(
+            "TIBS_DEBUG_FAKE_PROGRESS_BAR is set, but the fake-progress feature is disabled"
+        );
     }
     platform_services
 }
 
 fn main() -> color_eyre::Result<()> {
     color_eyre::install()?;
-    env_logger::init();
+    env_logger::Builder::from_env(env_logger::Env::default().default_filter_or("info")).init();
+    log::info!("Starting TIBS");
 
     let mut context = select_and_init_context();
     let (screen_width, screen_height) = context.size();
+    log::info!("Graphics context initialized with size {screen_width}x{screen_height}");
     let mut clay = clay_layout::Clay::new((screen_width as f32, screen_height as f32).into());
     clay.set_measure_text_function(create_measure_text_function(&FONTS));
 
     let assets = Rc::new(AssetCache::new(
         std::env::var("TIBS_ASSETS_FOLDER").unwrap_or("assets".into()),
     )?);
+    log::info!("Creating platform services");
     let platform_services = apply_debug_platform_overrides(create_platform_services());
 
     let app_state = Mutex::new(app::AppState {
@@ -142,6 +148,7 @@ fn main() -> color_eyre::Result<()> {
         should_exit: false,
         login_manager: LoginManager::new(platform_services.authentication),
         session_manager: platform_services.sessions,
+        last_login_session_active: None,
         login_animation: seq!(
             BasicAnimation::new("hide_ui", 0.2, ease_in_quad),
             DelayAnimation::new(

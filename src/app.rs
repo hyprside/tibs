@@ -47,6 +47,7 @@ pub struct AppState<'a> {
     pub should_exit: bool,
     pub login_manager: LoginManager,
     pub session_manager: Box<dyn SessionManager>,
+    pub last_login_session_active: Option<bool>,
     pub login_animation: AnimationStateTracker,
     pub login_animation_direction: LoginAnimationDirection,
     pub scroll_velocity: (f32, f32),
@@ -55,7 +56,12 @@ pub struct AppState<'a> {
 
 impl AppState<'_> {
     pub fn update(&mut self, context: &mut dyn TibsContext) {
-        if !self.session_manager.is_login_session_active() {
+        let login_session_active = self.session_manager.is_login_session_active();
+        if self.last_login_session_active != Some(login_session_active) {
+            log::info!("Login session active state changed: {login_session_active}");
+            self.last_login_session_active = Some(login_session_active);
+        }
+        if !login_session_active {
             sleep(Duration::from_millis(2));
             return;
         }
@@ -78,6 +84,7 @@ impl AppState<'_> {
             && std::env::var("TIBS_DEV_MODE") == Ok("1".to_string())
         {
             self.devtools = !self.devtools;
+            log::info!("Devtools toggled: {}", self.devtools);
             self.clay.set_debug_mode(self.devtools);
         }
 
