@@ -27,8 +27,6 @@ impl<T: GlesContext + Input> TibsContext for T {
     }
 }
 
-
-
 pub fn select_and_init_context() -> Box<dyn TibsContext> {
     let display_is_defined = std::env::var("DISPLAY").is_ok();
     if display_is_defined {

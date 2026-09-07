@@ -7,8 +7,12 @@ use skia_safe::{self, images, Image, ImageInfo, Paint, Point, Rect, SamplingOpti
 
 use crate::input::{Input, MouseButton};
 
+struct CursorVariation {
+    image: Image,
+    hotspot: (i32, i32),
+}
 pub struct Cursor {
-    cursors: HashMap<String, Image>,
+    cursors: HashMap<String, CursorVariation>,
     cursor_size: u32,
     style_info: Option<CursorStyleInfo>,
     cursor_manager: Option<HyprCursorManager>,
@@ -67,6 +71,7 @@ impl Cursor {
                 return;
             }
             log::debug!("Received image data, extracting Cairo surface.");
+
             // Get a cairo surface from the first image data entry.
             let surface = data[0].surface();
 
@@ -121,9 +126,10 @@ impl Cursor {
             );
 
             log::debug!("Freeing hyprcursor image data.");
+            let hotspot = (data[0].hotspot_x(), data[0].hotspot_y());
             // Free the hyprcursor image data.
             unsafe { hyprcursor_cursor_image_data_free(data.as_mut_ptr().cast(), data.len() as _) }
-            Some(image)
+            Some(CursorVariation { image, hotspot })
         } else {
             log::debug!(
                 "Cursor manager theme is not valid. Skipping cursor load for: {}",
@@ -139,7 +145,7 @@ impl Cursor {
         }
     }
 
-    pub fn get_or_load_cursor(&mut self, cursor_name: &str) -> Option<&Image> {
+    pub fn get_or_load_cursor(&mut self, cursor_name: &str) -> Option<&CursorVariation> {
         if !self.cursors.contains_key(cursor_name) {
             log::debug!("Cursor '{}' not found in cache, loading now.", cursor_name);
             self.load_cursor(cursor_name);
@@ -154,8 +160,12 @@ impl Cursor {
         cursor_name: &str,
     ) {
         let (mx, my) = input.mouse_position();
-        let pos = Point::new(mx, my);
-        if let Some(image) = self.get_or_load_cursor(cursor_name) {
+        if let Some(CursorVariation {
+            image,
+            hotspot: (hx, hy),
+        }) = self.get_or_load_cursor(cursor_name)
+        {
+            let pos = Point::new(mx - *hx as f32, my - *hy as f32);
             let dest_rect =
                 Rect::from_xywh(pos.x, pos.y, image.width() as f32, image.height() as f32);
             skia_canvas.draw_image_rect_with_sampling_options(
@@ -166,6 +176,7 @@ impl Cursor {
                 &Paint::default().set_anti_alias(true),
             );
         } else {
+            let pos = Point::new(mx, my);
             log::debug!("Fallback rendering for cursor '{}'.", cursor_name);
             // Fallback: draw a circle.
             let cursor_radius = if input.is_mouse_button_down(MouseButton::Left) {
