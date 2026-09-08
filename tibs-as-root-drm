@@ -1,4 +1,4 @@
 #!/usr/bin/env bash
 
 
-sudo bash -c "TIBS_DEBUG_FAKE_PROGRESS_BAR=1 LD_LIBRARY_PATH=$LD_LIBRARY_PATH target/debug/tibs"
+sudo bash -c "TIBS_DEBUG_FAKE_PROGRESS_BAR=1 LD_LIBRARY_PATH=$LD_LIBRARY_PATH target/debug/tibs" |& tee logs.txt
