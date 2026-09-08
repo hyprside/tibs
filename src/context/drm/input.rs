@@ -94,9 +94,6 @@ impl Input for DrmContext {
     fn mouse_wheel(&self) -> (f32, f32) {
         // Return the accumulated mouse wheel delta for this frame.
         let (x, y) = self.mouse_state.mouse_wheel_delta;
-        if x != 0.0 || y != 0.0 {
-            dbg!(x, y);
-        }
         if self.is_key_down(Keysym::Shift_L) {
             (y as f32, x as f32)
         } else {
@@ -117,6 +114,9 @@ impl Input for DrmContext {
         let new_focus = super::TTY_FOCUS.load(std::sync::atomic::Ordering::Relaxed);
         self.focused = new_focus;
         self.poll_display_events();
+        if !self.focused {
+            return;
+        }
 
         // Reset the keyboard and mouse state
         self.mouse_state.new_frame();
