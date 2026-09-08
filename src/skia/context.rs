@@ -11,7 +11,7 @@ use skia_safe::{
 };
 pub mod clay_renderer;
 use crate::gl;
-use crate::gles_context::GlesContext;
+use crate::gles_context::{GlesContext, RenderTargetOrigin};
 
 pub mod asset_loaders {
     mod image;
@@ -26,6 +26,7 @@ pub struct SkiaContext {
     width: u32,
     height: u32,
     fboid: u32,
+    origin: RenderTargetOrigin,
 }
 
 impl SkiaContext {
@@ -38,7 +39,8 @@ impl SkiaContext {
 
         let (width, height) = context.size();
         let fboid = context.framebuffer_id();
-        let surface = create_skia_surface(&mut skia_context, width, height, fboid)
+        let origin = context.render_target_origin();
+        let surface = create_skia_surface(&mut skia_context, width, height, fboid, origin)
             .expect("Failed to create Skia surface");
 
         Self {
@@ -47,17 +49,34 @@ impl SkiaContext {
             width,
             height,
             fboid,
+            origin,
         }
     }
 
-    pub fn set_render_target(&mut self, screen_width: u32, screen_height: u32, fboid: u32) -> bool {
-        if self.width != screen_width || self.height != screen_height || self.fboid != fboid {
+    pub fn set_render_target(
+        &mut self,
+        screen_width: u32,
+        screen_height: u32,
+        fboid: u32,
+        origin: RenderTargetOrigin,
+    ) -> bool {
+        if self.width != screen_width
+            || self.height != screen_height
+            || self.fboid != fboid
+            || self.origin != origin
+        {
             self.width = screen_width;
             self.height = screen_height;
             self.fboid = fboid;
-            self.surface =
-                create_skia_surface(&mut self.context, screen_width, screen_height, fboid)
-                    .expect("Failed to recreate Skia surface");
+            self.origin = origin;
+            self.surface = create_skia_surface(
+                &mut self.context,
+                screen_width,
+                screen_height,
+                fboid,
+                origin,
+            )
+            .expect("Failed to recreate Skia surface");
             true
         } else {
             false
@@ -78,6 +97,7 @@ fn create_skia_surface(
     width: u32,
     height: u32,
     fboid: u32,
+    origin: RenderTargetOrigin,
 ) -> Result<Surface, &'static str> {
     let framebuffer_info = FramebufferInfo {
         fboid,
@@ -91,10 +111,17 @@ fn create_skia_surface(
     surfaces::wrap_backend_render_target(
         skia_context,
         &backend_render_target,
-        skia_safe::gpu::SurfaceOrigin::BottomLeft,
+        skia_surface_origin(origin),
         skia_safe::ColorType::RGBA8888,
         ColorSpace::new_srgb(),
         None,
     )
     .ok_or("Failed to wrap backend render target")
+}
+
+fn skia_surface_origin(origin: RenderTargetOrigin) -> skia_safe::gpu::SurfaceOrigin {
+    match origin {
+        RenderTargetOrigin::TopLeft => skia_safe::gpu::SurfaceOrigin::TopLeft,
+        RenderTargetOrigin::BottomLeft => skia_safe::gpu::SurfaceOrigin::BottomLeft,
+    }
 }

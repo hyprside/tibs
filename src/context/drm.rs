@@ -108,7 +108,9 @@ impl GlesContext for DrmContext {
     fn get_proc_address(&mut self, fn_name: &str) -> *const std::ffi::c_void {
         self.easydrm.get_proc_address(fn_name)
     }
-
+    fn render_target_origin(&self) -> crate::gles_context::RenderTargetOrigin {
+        crate::gles_context::RenderTargetOrigin::TopLeft
+    }
     fn swap_buffers(&mut self) -> bool {
         self.clear_non_target_monitors();
         let swapped = self
