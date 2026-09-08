@@ -57,6 +57,7 @@ pub struct AppState<'a> {
 impl AppState<'_> {
     pub fn update(&mut self, context: &mut dyn TibsContext) {
         let login_session_active = self.session_manager.is_login_session_active();
+        context.as_gles_context_mut().set_commit_allowed(login_session_active);
         if self.last_login_session_active != Some(login_session_active) {
             log::info!("Login session active state changed: {login_session_active}");
             self.last_login_session_active = Some(login_session_active);
@@ -234,7 +235,16 @@ impl AppState<'_> {
         if let Some(fps) = self.fps_counter.tick() {
             println!("FPS: {:.2}", fps);
         }
-        context.swap_buffers();
+        // Re-check immediately before the DRM commit. A VT switch can happen
+        // while rendering; in that case leave the frame uncommitted and let
+        // the next iteration resume once logind reports our session active.
+        let commit_allowed = self.session_manager.is_login_session_active();
+        context
+            .as_gles_context_mut()
+            .set_commit_allowed(commit_allowed);
+        if commit_allowed {
+            context.swap_buffers();
+        }
         self.frame_pool.reset();
     }
     pub fn ensure_skia_context(&mut self, context: &mut dyn TibsContext) {
@@ -250,6 +260,7 @@ impl AppState<'_> {
                 screen_width,
                 screen_height,
                 context.as_gles_context().framebuffer_id(),
+                context.as_gles_context().render_target_origin(),
             ) {
                 self.clay
                     .set_layout_dimensions((screen_width as f32, screen_height as f32).into());

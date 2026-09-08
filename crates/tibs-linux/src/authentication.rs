@@ -1,13 +1,14 @@
-use color_eyre::Result;
-use pam::{set_item, Client, PasswordConv};
-use std::{
-    ffi::CString,
-    mem::transmute,
-    sync::{
-        atomic::{AtomicBool, Ordering},
-        Arc, Mutex, RwLock,
-    },
+use color_eyre::{
+    eyre::{ensure, eyre},
+    Result,
 };
+use pam::{Client, PasswordConv};
+use std::sync::{
+    atomic::{AtomicBool, Ordering},
+    Arc, Mutex, RwLock,
+};
+
+pub(crate) const PAM_SERVICE: &str = "login";
 use tibs_service_definitions::{
     AuthProof, AuthState, AuthenticationService, AuthenticationSession, UserAccount,
 };
@@ -24,16 +25,15 @@ impl LinuxPamAuthProof {
         }
     }
 
-    pub(crate) fn prepare_tty_session(&self, tty_number: u16) -> Result<()> {
-        let mut client = self.client.write().unwrap();
-        client.set_env("XDG_VTNR", &tty_number.to_string())?;
-        client.set_env("XDG_SEAT", "seat0")?;
-
-        let tty_item = CString::new(format!("tty{tty_number}"))?;
-        set_item(client.handle, pam::PamItemType::TTY, unsafe {
-            transmute(tty_item.as_ptr())
-        })?;
-        client.open_session()?;
+    pub(crate) fn verify_user(&self, username: &str) -> Result<()> {
+        let mut client = self
+            .client
+            .write()
+            .map_err(|_| eyre!("PAM authentication proof lock poisoned"))?;
+        ensure!(
+            client.get_user()? == username,
+            "PAM proof belongs to another user"
+        );
         Ok(())
     }
 }
@@ -143,7 +143,7 @@ impl AuthenticationSession for LinuxAuthenticationSession {
                 }
             };
 
-            let mut client = match Client::with_password("login") {
+            let mut client = match Client::with_password(PAM_SERVICE) {
                 Ok(client) => client,
                 Err(error) => return fail(format!("Failed to create PAM client: {error:#?}")),
             };

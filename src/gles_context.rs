@@ -18,4 +18,7 @@ pub trait GlesContext {
     }
     fn hint_pause_rendering(&mut self) {}
     fn hint_resume_rendering(&mut self) {}
+    /// Controls whether this context may submit display commits. The session
+    /// manager owns this gate; inactive sessions must leave DRM untouched.
+    fn set_commit_allowed(&mut self, _allowed: bool) {}
 }

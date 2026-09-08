@@ -59,7 +59,7 @@ use std::{
 #[cfg(feature = "fake-progress")]
 use tibs_fake_services::FakeSystemInitProgressService;
 #[cfg(feature = "linux")]
-use tibs_linux::create_platform_services;
+use tibs_linux::platform_services_layer;
 use tibs_service_definitions::PlatformServices;
 
 static UBUNTU_FONT: LazyLock<Typeface> = LazyLock::new(|| {
@@ -123,7 +123,7 @@ fn main() -> color_eyre::Result<()> {
         std::env::var("TIBS_ASSETS_FOLDER").unwrap_or("assets".into()),
     )?);
     log::info!("Creating platform services");
-    let platform_services = apply_debug_platform_overrides(create_platform_services());
+    let platform_services = apply_debug_platform_overrides(platform_services_layer()?);
 
     let app_state = Mutex::new(app::AppState {
         boot_progress: progress_watcher::ProgressWatcher::new(&*platform_services.init_progress),

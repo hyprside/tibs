@@ -111,8 +111,6 @@ impl Input for DrmContext {
     }
 
     fn poll_events(&mut self) {
-        let new_focus = super::TTY_FOCUS.load(std::sync::atomic::Ordering::Relaxed);
-        self.focused = new_focus;
         self.poll_display_events();
         if !self.focused {
             return;

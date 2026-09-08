@@ -2,8 +2,8 @@ use std::collections::HashMap;
 
 use futures_util::{FutureExt as _, StreamExt};
 use tibs_service_definitions::{InitProgress, SystemInitProgressService};
-use zbus_systemd::systemd1::{ManagerProxy, UnitProxy};
-use zbus_systemd::zbus::{self, Connection};
+use zbus_systemd::systemd1::{self, UnitProxy};
+use zbus_systemd::zbus;
 
 #[derive(Debug, Copy, Clone, PartialEq, Eq, PartialOrd, Ord)]
 enum ServiceState {
@@ -20,34 +20,48 @@ struct LinuxProgressData {
 
 impl LinuxProgressData {
     fn to_init_progress(&self) -> InitProgress {
-        let mut init_progress = InitProgress {
-            finished: self.finished,
-            ..Default::default()
-        };
-
-        for state in self.services.values() {
-            match state {
-                ServiceState::Loading => init_progress.pending_services += 1,
-                ServiceState::Failed => init_progress.failed_services += 1,
-                ServiceState::Loaded => init_progress.loaded_services += 1,
-            }
-        }
-
-        init_progress
+        self.services.values().fold(
+            InitProgress {
+                finished: self.finished,
+                ..Default::default()
+            },
+            |init, state| InitProgress {
+                pending_services: if matches!(state, ServiceState::Loading) {
+                    init.pending_services + 1
+                } else {
+                    init.pending_services
+                },
+                failed_services: if matches!(state, ServiceState::Failed) {
+                    init.failed_services + 1
+                } else {
+                    init.pending_services
+                },
+                loaded_services: if matches!(state, ServiceState::Loaded) {
+                    init.loaded_services + 1
+                } else {
+                    init.loaded_services
+                },
+                ..init
+            },
+        )
     }
 }
 
-pub struct LinuxSystemInitProgressService;
+pub struct LinuxSystemInitProgressService {
+    systemd: systemd1::ManagerProxy<'static>,
+    dbus: zbus::Connection,
+}
 
 impl LinuxSystemInitProgressService {
-    pub fn new() -> Self {
-        Self
-    }
-}
-
-impl Default for LinuxSystemInitProgressService {
-    fn default() -> Self {
-        Self::new()
+    pub fn new(dbus: &zbus::Connection, systemd: &systemd1::ManagerProxy<'static>) -> Self {
+        (
+            Self {
+                systemd: systemd.clone(),
+                dbus: dbus.clone(),
+            },
+            log::info!("Initialized linux implementation of SystemInitProgressService"),
+        )
+            .0
     }
 }
 
@@ -55,24 +69,21 @@ impl SystemInitProgressService for LinuxSystemInitProgressService {
     fn watch_progress(&self) -> smol::channel::Receiver<InitProgress> {
         let (tx, rx) = smol::channel::unbounded();
         log::info!("Starting systemd init progress watcher");
-
+        let dbus = self.dbus.clone();
+        let systemd = self.systemd.clone();
         std::thread::spawn(move || {
             smol::block_on(async move {
                 let mut progress_data = LinuxProgressData::default();
                 let _ = tx.send(progress_data.to_init_progress()).await;
 
                 log::info!("Connecting to system bus for systemd progress");
-                let connection = Connection::system().await?;
-                log::info!("Connected to system bus");
-                let manager = ManagerProxy::new(&connection).await?;
-                log::info!("Connected to systemd manager");
-                let mut job_new_stream = manager.receive_job_new().await?;
-                let mut job_removed_stream = manager.receive_job_removed().await?;
-                let mut system_started_up = manager.receive_startup_finished().await?;
-                let default_target_path = manager
-                    .get_unit(manager.get_default_target().await?)
+                let mut job_new_stream = systemd.receive_job_new().await?;
+                let mut job_removed_stream = systemd.receive_job_removed().await?;
+                let mut system_started_up = systemd.receive_startup_finished().await?;
+                let default_target_path = systemd
+                    .get_unit(systemd.get_default_target().await?)
                     .await?;
-                let default_target = UnitProxy::new(&connection, default_target_path).await?;
+                let default_target = UnitProxy::new(&dbus, default_target_path).await?;
 
                 if default_target.active_state().await? == "active" {
                     progress_data.finished = true;
@@ -81,7 +92,7 @@ impl SystemInitProgressService for LinuxSystemInitProgressService {
                     return Ok(());
                 }
 
-                let jobs = manager.list_jobs().await?;
+                let jobs = systemd.list_jobs().await?;
                 log::info!("Loaded {} initial systemd jobs", jobs.len());
                 progress_data.services = jobs
                     .iter()
