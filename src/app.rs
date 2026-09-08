@@ -246,7 +246,11 @@ impl AppState<'_> {
                 .set_layout_dimensions((screen_width as f32, screen_height as f32).into());
             self.skia = Some(c);
         } else if let Some(ctx) = &mut self.skia {
-            if ctx.set_size(screen_width, screen_height) {
+            if ctx.set_render_target(
+                screen_width,
+                screen_height,
+                context.as_gles_context().framebuffer_id(),
+            ) {
                 self.clay
                     .set_layout_dimensions((screen_width as f32, screen_height as f32).into());
             }

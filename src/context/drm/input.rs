@@ -1,10 +1,7 @@
 use std::{
     collections::{HashMap, HashSet},
     fs::{File, OpenOptions},
-    os::{
-        fd::{AsRawFd, OwnedFd},
-        unix::fs::OpenOptionsExt,
-    },
+    os::{fd::OwnedFd, unix::fs::OpenOptionsExt},
     path::Path,
 };
 
@@ -118,18 +115,8 @@ impl Input for DrmContext {
 
     fn poll_events(&mut self) {
         let new_focus = super::TTY_FOCUS.load(std::sync::atomic::Ordering::Relaxed);
-        if self.focused != new_focus {
-            if new_focus {
-                if unsafe { libc::ioctl(self.gbm_device.0.as_raw_fd(), 0x2000641e, 0) } != 0 {
-                    log::error!("Failed to resume DRM rendering")
-                }
-            } else {
-                if unsafe { libc::ioctl(self.gbm_device.0.as_raw_fd(), 0x2000641f, 0) } != 0 {
-                    log::error!("Failed to pause DRM rendering")
-                }
-            }
-        }
         self.focused = new_focus;
+        self.poll_display_events();
 
         // Reset the keyboard and mouse state
         self.mouse_state.new_frame();

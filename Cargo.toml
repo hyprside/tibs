@@ -34,6 +34,7 @@ libhyprcursor-sys = "0.2.0"
 cairo-rs = { version = "0.19.2", default-features = false }
 env_logger = "0.11.8"
 log = "0.4.27"
+easydrm = "0.4.0"
 
 [dependencies.clay-layout]
 features = ["debug"]

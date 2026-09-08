@@ -25,6 +25,7 @@ pub struct SkiaContext {
     surface: Surface,
     width: u32,
     height: u32,
+    fboid: u32,
 }
 
 impl SkiaContext {
@@ -36,7 +37,8 @@ impl SkiaContext {
             direct_contexts::make_gl(interface, None).expect("Failed to initialize skia (context)");
 
         let (width, height) = context.size();
-        let surface = create_skia_surface(&mut skia_context, width, height, 0)
+        let fboid = context.framebuffer_id();
+        let surface = create_skia_surface(&mut skia_context, width, height, fboid)
             .expect("Failed to create Skia surface");
 
         Self {
@@ -44,15 +46,18 @@ impl SkiaContext {
             surface,
             width,
             height,
+            fboid,
         }
     }
 
-    pub fn set_size(&mut self, screen_width: u32, screen_height: u32) -> bool {
-        if self.width != screen_width || self.height != screen_height {
+    pub fn set_render_target(&mut self, screen_width: u32, screen_height: u32, fboid: u32) -> bool {
+        if self.width != screen_width || self.height != screen_height || self.fboid != fboid {
             self.width = screen_width;
             self.height = screen_height;
-            self.surface = create_skia_surface(&mut self.context, screen_width, screen_height, 0)
-                .expect("Failed to recreate Skia surface");
+            self.fboid = fboid;
+            self.surface =
+                create_skia_surface(&mut self.context, screen_width, screen_height, fboid)
+                    .expect("Failed to recreate Skia surface");
             true
         } else {
             false

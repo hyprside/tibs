@@ -1,31 +1,16 @@
+use crate::gl;
 use crate::input::KeyboardState;
 use ::input::Libinput;
-use drm::control::atomic::AtomicModeReq;
-pub use drm::control::Device as ControlDevice;
-use drm::control::{
-    self, connector, crtc, plane, property, AtomicCommitFlags, Mode, PageFlipFlags, PageFlipTarget,
-};
-pub use drm::Device;
-use drm::VblankWaitFlags;
-use gbm::{AsRaw, BufferObject, BufferObjectFlags};
-use glutin::api::egl;
-use glutin::config::ConfigTemplateBuilder;
-use glutin::context::ContextAttributesBuilder;
-use glutin::display::{AsRawDisplay, RawDisplay};
-use glutin::prelude::*;
-use glutin::surface::{SurfaceAttributesBuilder, WindowSurface};
+use drm::control::connector;
+use easydrm::EasyDRM;
 use input::{InputInterface, MouseState};
-use libc::{c_char, c_int, c_short, ioctl, pollfd, SIGUSR1, SIGUSR2};
-use raw_window_handle::{GbmDisplayHandle, GbmWindowHandle, RawDisplayHandle, RawWindowHandle};
-use std::collections::HashMap;
-use std::ffi::{c_void, CString};
+use libc::{c_char, c_int, c_short, ioctl, SIGUSR1, SIGUSR2};
 use std::fs::OpenOptions;
-use std::os::fd::{AsFd, AsRawFd};
-use std::ptr::NonNull;
+use std::os::fd::AsRawFd;
 use std::sync::atomic::{AtomicBool, Ordering};
 use std::sync::LazyLock;
-use std::time::Duration;
-use std::u64;
+
+use super::GlesContext;
 
 static TTY_FOCUS: AtomicBool = AtomicBool::new(true);
 static TTY: LazyLock<std::fs::File> = LazyLock::new(|| {
@@ -39,16 +24,16 @@ static TTY: LazyLock<std::fs::File> = LazyLock::new(|| {
 
 #[repr(C)]
 struct vt_mode {
-    mode: c_char,    // Operation mode
-    waitv: c_char,   // Unused
-    relsig: c_short, // Signal when releasing VT
-    acqsig: c_short, // Signal when acquiring VT
-    frsig: c_short,  // Unused
+    mode: c_char,
+    waitv: c_char,
+    relsig: c_short,
+    acqsig: c_short,
+    frsig: c_short,
 }
 
 const VT_PROCESS: c_char = 0x01;
-const VT_SETMODE: u64 = 0x5602; // from <linux/vt.h>
-const VT_RELDISP: u64 = 0x5605; // from <linux/vt.h>
+const VT_SETMODE: u64 = 0x5602;
+const VT_RELDISP: u64 = 0x5605;
 
 unsafe extern "C" fn handle_release(_sig: i32) {
     log::info!("DRM VT release signal received");
@@ -66,7 +51,8 @@ unsafe extern "C" fn handle_acquire(_sig: i32) {
         .map_err(|e| log::error!("Failed to set graphics mode: {e}"))
         .ok();
 }
-const KDSETMODE: u64 = 0x4B3A; // from <linux/kd.h>
+
+const KDSETMODE: u64 = 0x4B3A;
 const KD_TEXT: c_int = 0;
 const KD_GRAPHICS: c_int = 1;
 
@@ -78,6 +64,7 @@ fn set_tty_graphics_mode(fd: i32) -> std::io::Result<()> {
         Ok(())
     }
 }
+
 fn set_tty_text_mode(fd: i32) -> std::io::Result<()> {
     let ret = unsafe { libc::ioctl(fd, KDSETMODE, KD_TEXT) };
     if ret < 0 {
@@ -86,6 +73,7 @@ fn set_tty_text_mode(fd: i32) -> std::io::Result<()> {
         Ok(())
     }
 }
+
 fn set_vt_mode(fd: i32) -> std::io::Result<()> {
     let mut vt = vt_mode {
         mode: VT_PROCESS,
@@ -103,237 +91,53 @@ fn set_vt_mode(fd: i32) -> std::io::Result<()> {
     }
 }
 
-use crate::gl;
-
-use super::GlesContext;
-
-#[derive(Debug)]
-/// A simple wrapper for a device node.
-pub struct Card(std::fs::File);
-
-/// Implementing `AsFd` is a prerequisite to implementing the traits found
-/// in this crate. Here, we are just calling `as_fd()` on the inner File.
-impl std::os::unix::io::AsFd for Card {
-    fn as_fd(&self) -> std::os::unix::io::BorrowedFd<'_> {
-        self.0.as_fd()
-    }
-}
-
-/// With `AsFd` implemented, we can now implement `drm::Device`.
-impl Device for Card {}
-impl ControlDevice for Card {}
-
-/// Simple helper methods for opening a `Card`.
-impl Card {
-    pub fn open(path: &str) -> std::io::Result<Self> {
-        log::debug!("Opening DRM card at {path}");
-        let mut options = std::fs::OpenOptions::new();
-        options.read(true);
-        options.write(true);
-        Ok(Self(options.open(path)?))
-    }
-
-    pub fn open_global() -> Self {
-        log::info!("Looking for DRM device");
-        let query = || {
-            egl::device::Device::query_devices()
-                .expect("Failed to query devices")
-                .filter_map(|egl_device| {
-                    egl_device
-                        .drm_device_node_path()
-                        .and_then(|p| p.as_os_str().to_str())
-                })
-                .chain(["/dev/dri/card0", "/dev/dri/card1"])
-        };
-        let mut devices = query();
-        let started_time = std::time::Instant::now();
-        loop {
-            let Some(drm) = devices.next() else {
-                if started_time.elapsed().as_secs() < 5 {
-                    log::debug!("Failed to find DRM device, trying again in 50ms");
-                    devices = query();
-                    std::thread::sleep(Duration::from_millis(50));
-                    continue;
-                }
-                panic!("No device found (waited for 5s)");
-            };
-            match Self::open(drm) {
-                Ok(card) => {
-                    log::info!("Using DRM device: {}", drm);
-                    return card;
-                }
-                Err(e) => {
-                    log::warn!("Failed to open DRM device {}: {}", drm, e);
-                }
-            }
-        }
-    }
-
-    fn get_connector_and_crtc(&self) -> (connector::Info, crtc::Info, Mode, plane::Handle) {
-        let res = self
-            .resource_handles()
-            .expect("Could not load normal resource ids.");
-        let coninfo: Vec<connector::Info> = res
-            .connectors()
-            .iter()
-            .flat_map(|con| self.get_connector(*con, true))
-            .collect();
-
-        let con = coninfo
-            .iter()
-            .find(|&i| i.state() == connector::State::Connected)
-            .expect("No connected connectors");
-
-        let crtcinfo: Vec<crtc::Info> = res
-            .crtcs()
-            .iter()
-            .flat_map(|crtc| self.get_crtc(*crtc))
-            .collect();
-        let &mode = con.modes().first().expect("No modes found on connector");
-
-        let crtc = crtcinfo.first().expect("No crtcs found");
-
-        let planes = self.plane_handles().expect("Could not list planes");
-        let plane = planes
-            .into_iter()
-            .find(|&plane| {
-                self.get_plane(plane)
-                    .map(|plane_info| {
-                        let compatible_crtcs = res.filter_crtcs(plane_info.possible_crtcs());
-                        if !compatible_crtcs.contains(&crtc.handle()) {
-                            return false;
-                        }
-                        if let Ok(props) = self.get_properties(plane) {
-                            for (&id, &val) in props.iter() {
-                                if let Ok(info) = self.get_property(id) {
-                                    if info.name().to_str().map(|x| x == "type").unwrap_or(false) {
-                                        return val
-                                            == (drm::control::PlaneType::Primary as u32).into();
-                                    }
-                                }
-                            }
-                        }
-                        false
-                    })
-                    .unwrap_or(false)
-            })
-            .expect("Failed to find primary plane");
-
-        (con.clone(), crtc.clone(), mode, plane)
-    }
-}
 pub struct DrmContext {
-    display: egl::display::Display,
-    gbm_device: gbm::Device<Card>,
-    gbm_surface: gbm::Surface<()>,
-    surface: egl::surface::Surface<WindowSurface>,
-    context: egl::context::PossiblyCurrentContext,
-    connector: connector::Info,
-    crtc: crtc::Info,
-    mode: Mode,
+    easydrm: EasyDRM<()>,
+    target_connector: Option<connector::Handle>,
     libinput: Libinput,
     xkb_state: xkbcommon::xkb::State,
     keyboard_state: KeyboardState,
     mouse_state: MouseState,
     focused: bool,
-    plane: plane::Handle,
-    plane_properties: HashMap<String, property::Info>,
-    first_frame: bool,
-    previous_buffer: Option<BufferObject<()>>,
-}
-
-fn find_egl_config(egl_display: &egl::display::Display) -> egl::config::Config {
-    unsafe { egl_display.find_configs(ConfigTemplateBuilder::new().build()) }
-        .unwrap()
-        .reduce(|config, acc| {
-            if config.num_samples() > acc.num_samples() {
-                config
-            } else {
-                acc
-            }
-        })
-        .expect("No available configs")
+    has_swapped_once: bool,
+    gl_loaded: bool,
+    framebuffer_id: u32,
 }
 
 impl GlesContext for DrmContext {
     fn get_proc_address(&mut self, fn_name: &str) -> *const std::ffi::c_void {
-        let symbol = CString::new(fn_name).unwrap();
-        self.display.get_proc_address(symbol.as_c_str())
+        self.easydrm.get_proc_address(fn_name)
     }
 
     fn swap_buffers(&mut self) -> bool {
-        self._swap_buffers()
-            .map_err(|e| log::error!("Failed to swap buffers: {}", e))
-            .is_ok()
+        self.clear_non_target_monitors();
+        let swapped = self
+            .easydrm
+            .swap_buffers()
+            .map_err(|e| log::error!("Failed to swap DRM buffers: {e}"))
+            .is_ok();
+        self.has_swapped_once |= swapped;
+        swapped
     }
 
     fn size(&self) -> (u32, u32) {
-        (self.mode.size().0 as u32, self.mode.size().1 as u32)
+        self.target_monitor_size().unwrap_or((1, 1))
+    }
+
+    fn framebuffer_id(&self) -> u32 {
+        self.framebuffer_id
     }
 }
 
 impl DrmContext {
     pub fn new() -> Self {
-        log::info!("Initializing DRM context");
-        let card = Card::open_global();
+        log::info!("Initializing DRM context via EasyDRM");
+        let easydrm = EasyDRM::init_empty().expect("Failed to initialize EasyDRM");
 
-        card.set_client_capability(drm::ClientCapability::UniversalPlanes, true)
-            .expect("Unable to request UniversalPlanes capability");
-        card.set_client_capability(drm::ClientCapability::Atomic, true)
-            .expect("Unable to request Atomic capability");
-
-        let (connector, crtc, mode, plane) = card.get_connector_and_crtc();
-        log::info!(
-            "Selected DRM connector {:?}, CRTC {:?}, mode {:?}, plane {:?}",
-            connector.handle(),
-            crtc.handle(),
-            mode.size(),
-            plane
-        );
-        let gbm = gbm::Device::new(card).unwrap();
-        let (disp_width, disp_height) = mode.size();
-        let rdh = RawDisplayHandle::Gbm(GbmDisplayHandle::new(
-            NonNull::new(gbm.as_raw_mut()).unwrap().cast(),
-        ));
-        let egl_display = unsafe { egl::display::Display::new(rdh) }.expect("Create EGL Display");
-        log::info!("Created EGL display for DRM context");
-        let config = find_egl_config(&egl_display);
-        log::debug!("Selected EGL config with {} samples", config.num_samples());
-        let gbm_surface = gbm
-            .create_surface::<()>(
-                disp_width.into(),
-                disp_height.into(),
-                gbm::Format::Xrgb8888,
-                BufferObjectFlags::SCANOUT | BufferObjectFlags::RENDERING,
-            )
-            .unwrap();
-        log::info!("Created GBM surface {}x{}", disp_width, disp_height);
-        let rwh = RawWindowHandle::Gbm(GbmWindowHandle::new(
-            NonNull::new(gbm_surface.as_raw_mut()).unwrap().cast(),
-        ));
-        let surface = unsafe {
-            egl_display
-                .create_window_surface(
-                    &config,
-                    &SurfaceAttributesBuilder::<WindowSurface>::new().build(
-                        rwh,
-                        (disp_width as u32).try_into().unwrap(),
-                        (disp_height as u32).try_into().unwrap(),
-                    ),
-                )
-                .expect("Failed to create EGL surface")
-        };
-        let context = unsafe {
-            egl_display
-                .create_context(&config, &ContextAttributesBuilder::new().build(Some(rwh)))
-                .expect("Failed to create EGL context")
-                .make_current(&surface)
-                .unwrap()
-        };
-        log::info!("Created EGL context and made it current");
         let mut libinput = Libinput::new_with_udev(InputInterface);
         libinput.udev_assign_seat("seat0").unwrap();
         log::info!("libinput assigned to seat0");
+
         let xkb_context = xkbcommon::xkb::Context::new(xkbcommon::xkb::CONTEXT_NO_FLAGS);
         let xkb_keymap = xkbcommon::xkb::Keymap::new_from_names(
             &xkb_context,
@@ -346,190 +150,129 @@ impl DrmContext {
         )
         .unwrap();
         let xkb_state = xkbcommon::xkb::State::new(&xkb_keymap);
+
         let tty_fd = TTY.as_raw_fd();
         set_vt_mode(tty_fd).expect("Failed to set VT mode");
         log::info!("Configured DRM VT process mode");
         unsafe {
-            libc::signal(SIGUSR1, handle_release as usize);
-            libc::signal(SIGUSR2, handle_acquire as usize);
+            libc::signal(SIGUSR1, handle_release as *const () as usize);
+            libc::signal(SIGUSR2, handle_acquire as *const () as usize);
         }
         log::info!("Installed DRM VT signal handlers");
+
+        let target_connector = easydrm
+            .monitors()
+            .next()
+            .map(|monitor| monitor.connector_id());
         let mut context = DrmContext {
-            previous_buffer: None,
-            display: egl_display,
-            gbm_surface,
-            surface,
-            context,
-            connector,
-            crtc,
-            mode,
+            target_connector,
+            mouse_state: MouseState::new_at_middle(1, 1),
+            easydrm,
             libinput,
             xkb_state,
-            mouse_state: MouseState::new_at_middle(disp_width as u32, disp_height as u32),
             keyboard_state: KeyboardState::new(),
             focused: true,
-            plane,
-            plane_properties: gbm
-                .get_properties(plane)
-                .and_then(|p| p.as_hashmap(&gbm))
-                .unwrap_or_default(),
-            gbm_device: gbm,
-            first_frame: true,
+            has_swapped_once: false,
+            gl_loaded: false,
+            framebuffer_id: 0,
         };
+
+        if let Some((width, height)) = context.target_monitor_size() {
+            context.mouse_state = MouseState::new_at_middle(width, height);
+        }
+
+        context.make_target_current();
         gl::load_with(|symbol| context.get_proc_address(symbol));
-        log::info!("OpenGL function pointers loaded for DRM context");
+        context.gl_loaded = true;
+        context.make_target_current();
+        log::info!("OpenGL function pointers loaded for EasyDRM context");
+
         context
     }
 
-    fn _swap_buffers(&mut self) -> color_eyre::Result<()> {
-        unsafe {
-            gl::Flush();
-            self.surface.swap_buffers(&self.context)?;
-            let egl = self.display.egl();
-            unsafe {
-                egl.SwapInterval(egl.GetCurrentDisplay(), 1);
-            }
-            // Fence EGL -> DRM
-            const EGL_SYNC_FENCE_KHR: u32 = 0x30F9;
-            let sync = unsafe {
-                egl.CreateSyncKHR(
-                    egl.GetCurrentDisplay(),
-                    EGL_SYNC_FENCE_KHR,
-                    std::ptr::null(),
-                )
-            };
-            let fence_fd = unsafe { egl.DupNativeFenceFDANDROID(egl.GetCurrentDisplay(), sync) };
-            let frontbuffer = self.gbm_surface.lock_front_buffer()?;
-            drop(self.previous_buffer.take());
+    fn target_monitor_size(&self) -> Option<(u32, u32)> {
+        self.target_connector
+            .and_then(|connector| self.easydrm.get_monitor(connector))
+            .map(|monitor| {
+                let (width, height) = monitor.size();
+                (width as u32, height as u32)
+            })
+    }
 
-            // if !self.first_frame {
-            //     self.gbm_device.wait_vblank(
-            //         drm::VblankWaitTarget::Relative(1),
-            //         VblankWaitFlags::empty(),
-            //         u32::from(self.crtc.handle()) >> 27,
-            //         0,
-            //     )?;
-            // }
-            let fb = self.gbm_device.add_framebuffer(&frontbuffer, 24, 32)?;
-            let con_props = self
-                .gbm_device
-                .get_properties(self.connector.handle())?
-                .as_hashmap(&self.gbm_device)?;
-            let crtc_props = self
-                .gbm_device
-                .get_properties(self.crtc.handle())?
-                .as_hashmap(&self.gbm_device)?;
-            let plane = self.plane;
-            let plane_props = self
-                .gbm_device
-                .get_properties(plane)?
-                .as_hashmap(&self.gbm_device)?;
-            let mut atomic_req = AtomicModeReq::new();
+    fn ensure_target_connector(&mut self) {
+        let target_is_valid = self
+            .target_connector
+            .and_then(|connector| self.easydrm.get_monitor(connector))
+            .is_some();
 
-            if self.first_frame {
-                atomic_req.add_property(
-                    self.connector.handle(),
-                    con_props["CRTC_ID"].handle(),
-                    property::Value::CRTC(Some(self.crtc.handle())),
+        if !target_is_valid {
+            self.target_connector = self.easydrm.monitors().next().map(|monitor| {
+                log::info!(
+                    "Selected EasyDRM connector {:?} as the TIBS render target",
+                    monitor.connector_id()
                 );
-                let blob = self
-                    .gbm_device
-                    .create_property_blob(&self.mode)
-                    .expect("Failed to create blob");
-                atomic_req.add_property(self.crtc.handle(), crtc_props["MODE_ID"].handle(), blob);
-                atomic_req.add_property(
-                    self.crtc.handle(),
-                    crtc_props["ACTIVE"].handle(),
-                    property::Value::Boolean(true),
-                );
-
-                atomic_req.add_property(
-                    plane,
-                    self.plane_properties["CRTC_ID"].handle(),
-                    property::Value::CRTC(Some(self.crtc.handle())),
-                );
-
-                atomic_req.add_property(
-                    plane,
-                    self.plane_properties["SRC_X"].handle(),
-                    property::Value::UnsignedRange(0),
-                );
-                atomic_req.add_property(
-                    plane,
-                    self.plane_properties["SRC_Y"].handle(),
-                    property::Value::UnsignedRange(0),
-                );
-                atomic_req.add_property(
-                    plane,
-                    self.plane_properties["SRC_W"].handle(),
-                    property::Value::UnsignedRange((self.mode.size().0 as u64) << 16),
-                );
-                atomic_req.add_property(
-                    plane,
-                    self.plane_properties["SRC_H"].handle(),
-                    property::Value::UnsignedRange((self.mode.size().1 as u64) << 16),
-                );
-                atomic_req.add_property(
-                    plane,
-                    self.plane_properties["CRTC_X"].handle(),
-                    property::Value::SignedRange(0),
-                );
-                atomic_req.add_property(
-                    plane,
-                    self.plane_properties["CRTC_Y"].handle(),
-                    property::Value::SignedRange(0),
-                );
-                atomic_req.add_property(
-                    plane,
-                    self.plane_properties["CRTC_W"].handle(),
-                    property::Value::UnsignedRange(self.mode.size().0 as u64),
-                );
-                atomic_req.add_property(
-                    plane,
-                    self.plane_properties["CRTC_H"].handle(),
-                    property::Value::UnsignedRange(self.mode.size().1 as u64),
-                );
-            }
-            atomic_req.add_property(
-                plane,
-                self.plane_properties["FB_ID"].handle(),
-                property::Value::Framebuffer(Some(fb)),
-            );
-            let prop_in_fence_fd_on_crtc = crtc_props.get("IN_FENCE_FD").map(|p| p.handle());
-            let prop_in_fence_fd_on_plane = plane_props.get("IN_FENCE_FD").map(|p| p.handle());
-            if let Some(h) = prop_in_fence_fd_on_crtc {
-                atomic_req.add_property(
-                    self.crtc.handle(),
-                    h,
-                    property::Value::SignedRange(fence_fd as i64),
-                );
-            } else if let Some(h) = prop_in_fence_fd_on_plane {
-                atomic_req.add_property(plane, h, property::Value::SignedRange(fence_fd as i64));
-            }
-
-            let mut flags = AtomicCommitFlags::PAGE_FLIP_EVENT;
-            if self.first_frame {
-                flags |= AtomicCommitFlags::ALLOW_MODESET;
-            } else {
-                flags |= AtomicCommitFlags::NONBLOCK;
-            }
-
-            // envia o commit
-            self.gbm_device
-                .atomic_commit(flags, atomic_req)
-                .expect("Failed to commit atomic request");
-
-            'l: loop {
-                for event in self.gbm_device.receive_events()? {
-                    if let control::Event::PageFlip(_) = event {
-                        break 'l; // Page flip event received
-                    }
-                }
-            }
-            self.first_frame = false;
-            self.previous_buffer = Some(frontbuffer);
-            Ok(())
+                monitor.connector_id()
+            });
         }
+    }
+
+    pub(crate) fn make_target_current(&mut self) {
+        self.ensure_target_connector();
+        let Some(connector) = self.target_connector else {
+            return;
+        };
+        let Some(monitor) = self.easydrm.get_monitor_mut(connector) else {
+            return;
+        };
+        if !monitor.can_render() {
+            return;
+        }
+        if let Err(e) = monitor.make_current() {
+            log::error!("Failed to make EasyDRM monitor current: {e}");
+            return;
+        }
+        self.update_framebuffer_id();
+    }
+
+    fn update_framebuffer_id(&mut self) {
+        if !self.gl_loaded {
+            return;
+        }
+        let mut framebuffer_id = 0;
+        unsafe {
+            gl::GetIntegerv(gl::FRAMEBUFFER_BINDING, &mut framebuffer_id);
+        }
+        self.framebuffer_id = framebuffer_id as u32;
+    }
+
+    fn clear_non_target_monitors(&mut self) {
+        let target_connector = self.target_connector;
+        for monitor in self.easydrm.monitors_mut() {
+            if Some(monitor.connector_id()) == target_connector || !monitor.can_render() {
+                continue;
+            }
+            if let Err(e) = monitor.make_current() {
+                log::error!("Failed to make secondary EasyDRM monitor current: {e}");
+                continue;
+            }
+            let gl = monitor.gl();
+            unsafe {
+                gl.ClearColor(0.0, 0.0, 0.0, 1.0);
+                gl.Clear(easydrm::gl::COLOR_BUFFER_BIT);
+            }
+        }
+    }
+
+    pub(crate) fn poll_display_events(&mut self) {
+        if !self.has_swapped_once {
+            self.make_target_current();
+            return;
+        }
+
+        if let Err(e) = self.easydrm.poll_events_ex([self.libinput.as_raw_fd()]) {
+            log::error!("Failed to poll EasyDRM events: {e}");
+        }
+        self.make_target_current();
     }
 }
 
