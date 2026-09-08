@@ -71,7 +71,7 @@ impl LoginManager {
 
         if let Some(entry) = login_map_lock.get_mut(&username) {
             Self::poll_entry(&username, entry);
-            if !matches!(entry.state, LoginState::Failed(_) | LoginState::Cancelled) {
+            if !matches!(entry.state, LoginState::Cancelled) {
                 log::debug!(
                     "Authentication session for user '{username}' already active with state {}",
                     entry.state.label()
